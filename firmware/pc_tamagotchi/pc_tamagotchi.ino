@@ -313,6 +313,29 @@ void setup() {
 }
 
 // =================  helpers  ==================================
+
+// ---- melody system (PCP-002) ----
+struct Note { uint16_t freq; uint16_t durMs; uint16_t pauseMs; };
+
+const Note MEL_ALERT[]      = { {2300, 90, 20}, {2300, 90, 0}, {0,0,0} };
+const Note MEL_PANIC1[]     = { {2000, 100, 50}, {2400, 100, 0}, {0,0,0} };
+const Note MEL_PANIC2[]     = { {2000, 80, 40}, {2400, 80, 40}, {2000, 80, 40}, {2400, 80, 0}, {0,0,0} };
+const Note MEL_PANIC3[]     = { {2600, 60, 30}, {2200, 60, 30}, {2600, 60, 30}, {2200, 60, 30}, {2800, 120, 0}, {0,0,0} };
+const Note MEL_LOWPWR[]     = { {1200, 120, 20}, {900, 200, 0}, {0,0,0} };
+const Note MEL_LOWBATT[]    = { {800, 150, 30}, {600, 200, 0}, {0,0,0} };
+const Note MEL_CLICK[]      = { {1500, 30, 0}, {0,0,0} };
+const Note MEL_CHARSWITCH[] = { {1700, 30, 0}, {0,0,0} };
+const Note MEL_MUTE_ON[]    = { {600, 40, 0}, {0,0,0} };
+const Note MEL_MUTE_OFF[]   = { {1800, 40, 0}, {0,0,0} };
+
+void playMelody(const Note* mel) {
+  if (g_mute || !mel) return;
+  for (int i = 0; mel[i].freq != 0; i++) {
+    M5.Speaker.tone(mel[i].freq, mel[i].durMs);
+    delay(mel[i].durMs + mel[i].pauseMs);
+  }
+}
+
 uint16_t lerpColor(uint16_t a, uint16_t b, float t) {
   // simple 565 blend
   int ar = (a >> 11) & 0x1F, ag = (a >> 5) & 0x3F, ab = a & 0x1F;
@@ -772,17 +795,17 @@ void loop() {
   if (M5.BtnA.wasClicked()) {
     g_lastActivity = millis(); g_forceOff = false;
     g_view = (g_view + 1) % VIEW_COUNT;
-    M5.Speaker.tone(1500, 30);
+    playMelody(MEL_CLICK);
   }
   if (M5.BtnB.wasSingleClicked()) {
     g_lastActivity = millis(); g_forceOff = false;
     g_char = (g_char + 1) % CHAR_COUNT;
-    M5.Speaker.tone(1700, 30);
+    playMelody(MEL_CHARSWITCH);
   }
   if (M5.BtnB.wasDoubleClicked()) {
     g_lastActivity = millis(); g_forceOff = false;
     g_mute = !g_mute;
-    M5.Speaker.tone(g_mute ? 600 : 1800, 40);
+    if (!g_mute) playMelody(MEL_MUTE_OFF);
   }
   // power button: short press toggles screen off/on; long hold -> power off
   if (M5.BtnPWR.wasClicked()) {
@@ -811,11 +834,9 @@ void loop() {
 
   // ---- alert beeps on mood escalation ----
   Mood mood = connected ? currentMood(cpu, ram, temp, gpu, pcbatt, pcchg) : M_SLEEP;
-  if (!g_mute && connected && mood != g_prevMood &&
+  if (connected && mood != g_prevMood &&
       (mood == M_PANIC || mood == M_HOT)) {
-    M5.Speaker.tone(2300, 90);
-    delay(110);
-    M5.Speaker.tone(2300, 90);
+    playMelody(MEL_ALERT);
   }
   g_prevMood = mood;
 
@@ -851,10 +872,7 @@ void loop() {
     if (justCrossed || dueAgain) {
       g_lastBattBeep = millis();
       g_lastActivity = millis();                            // wake screen to show warning
-      if (!g_mute) {
-        M5.Speaker.tone(1200, 120); delay(140);
-        M5.Speaker.tone(900, 200);
-      }
+      playMelody(MEL_LOWBATT);
     }
   }
   g_battWasLow = battLow;
