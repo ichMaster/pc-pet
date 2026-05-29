@@ -152,6 +152,9 @@ class Metrics:
         io = psutil.net_io_counters()
         self._net_bytes = io.bytes_sent + io.bytes_recv
         self._net_t = time.time()
+        dio = psutil.disk_io_counters()
+        self._disk_r = dio.read_bytes if dio else 0
+        self._disk_w = dio.write_bytes if dio else 0
         self._primed = False
 
     @staticmethod
@@ -193,13 +196,24 @@ class Metrics:
         net_kbs = max(0, min(net_kbs, 9999))
         self._net_bytes, self._net_t = total, now
 
+        dio = psutil.disk_io_counters()
+        if dio:
+            disk_r = int((dio.read_bytes - self._disk_r) / dt / 1_048_576)
+            disk_w = int((dio.write_bytes - self._disk_w) / dt / 1_048_576)
+            self._disk_r = dio.read_bytes
+            self._disk_w = dio.write_bytes
+        else:
+            disk_r, disk_w = 0, 0
+        disk_r = max(0, min(disk_r, 9999))
+        disk_w = max(0, min(disk_w, 9999))
+
         procs = len(psutil.pids())
         busiest, cpu_list, ram_list = self._top_lists(4)
 
         # first sample after priming is noisy; that's fine
         self._primed = True
         return (f"{cpu},{ram},{temp},{net_kbs},{procs},{busiest},"
-                f"{gpu},{batt},{charging};{cpu_list};{ram_list}")
+                f"{gpu},{batt},{charging},{disk_r},{disk_w};{cpu_list};{ram_list}")
 
 
 SERVICE_UUID = "6e400001-b5a3-f393-e0a9-e50e24dcca9e"

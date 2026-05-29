@@ -183,7 +183,7 @@ default) so you can see each state on the device.
 | ![Pet](docs/images/pet-bunny.jpeg) | ![Stats](docs/images/stats.jpeg) | ![Graph](docs/images/graph.jpeg) | ![Procs](docs/images/procs.jpeg) |
 
 - **Pet** — the creature + mood word + CPU/RAM bars + footer (temp / GPU / PC battery).
-- **Stats** — CPU / RAM / GPU / TEMP bars + battery / net / top process.
+- **Stats** — CPU / RAM / GPU / TEMP bars + battery / disk I/O / net / top process.
 - **Graph** — scrolling CPU history.
 - **Procs** — top processes by CPU and, separately, by RAM.
 

@@ -35,6 +35,7 @@
 portMUX_TYPE g_mux = portMUX_INITIALIZER_UNLOCKED;
 volatile int  g_cpu = 0, g_ram = 0, g_temp = -1, g_net = 0, g_procs = 0;
 volatile int  g_gpu = -1, g_batt = -1, g_charging = 0;   // GPU %, PC battery %, charging
+volatile int  g_diskR = 0, g_diskW = 0;
 char          g_top[16] = "-";
 volatile bool g_connected = false;
 volatile uint32_t g_lastPacket = 0;
@@ -187,7 +188,7 @@ static void parsePacket(char* buf) {
   char* ramPart     = strtok_r(nullptr, ";", &save1);
 
   int   cpu = 0, ram = 0, temp = -1, net = 0, procs = 0;
-  int   gpu = -1, batt = -1, charging = 0;
+  int   gpu = -1, batt = -1, charging = 0, diskR = 0, diskW = 0;
   char  top[16] = "-";
   if (metricsPart) {
     char* save2 = nullptr;
@@ -203,7 +204,9 @@ static void parsePacket(char* buf) {
         case 5: strncpy(top, tok, 15); top[15] = '\0'; break;
         case 6: gpu      = atoi(tok); break;
         case 7: batt     = atoi(tok); break;
-        case 8: charging = atoi(tok); break;
+        case 8:  charging = atoi(tok); break;
+        case 9:  diskR    = atoi(tok); break;
+        case 10: diskW    = atoi(tok); break;
       }
       tok = strtok_r(nullptr, ",", &save2);
       idx++;
@@ -223,6 +226,8 @@ static void parsePacket(char* buf) {
   g_gpu = (gpu < 0) ? -1 : constrain(gpu, 0, 100);
   g_batt = (batt < 0) ? -1 : constrain(batt, 0, 100);
   g_charging = charging;
+  g_diskR = constrain(diskR, 0, 9999);
+  g_diskW = constrain(diskW, 0, 9999);
   strncpy(g_top, top, 15);
   g_top[15] = '\0';
   g_lastPacket = millis();
@@ -655,7 +660,8 @@ void viewPet(int cpu, int ram, int temp, int net, int procs,
 }
 
 void viewStats(int cpu, int ram, int temp, int net, int procs,
-               const char* top, int gpu, int batt, int charging, bool connected) {
+               const char* top, int gpu, int batt, int charging, bool connected,
+               int diskR, int diskW) {
   canvas.fillScreen(canvas.color565(16, 18, 24));
   renderTopBar(cpu, ram, temp, net, procs, top, connected);
 
@@ -690,6 +696,9 @@ void viewStats(int cpu, int ram, int temp, int net, int procs,
   if (batt >= 0) snprintf(lb, sizeof(lb), "batt: %d%%%s", batt, charging ? "  (chg)" : "");
   else           snprintf(lb, sizeof(lb), "batt: --");
   canvas.drawString(lb, bx, y);       y += 14;
+  char ds[28];
+  snprintf(ds, sizeof(ds), "disk: R%d W%d MB/s", diskR, diskW);
+  canvas.drawString(ds, bx, y);       y += 14;
   char l1[24], l3[28];
   snprintf(l1, sizeof(l1), "net : %d KB/s   %dp", net, procs);
   canvas.drawString(l1, bx, y);       y += 14;
@@ -859,13 +868,14 @@ void loop() {
 
   // ---- snapshot shared state ----
   int cpu, ram, temp, net, procs;
-  int gpu, pcbatt, pcchg;
+  int gpu, pcbatt, pcchg, diskR, diskW;
   char top[16];
   bool connected;
   uint32_t last;
   portENTER_CRITICAL(&g_mux);
   cpu = g_cpu; ram = g_ram; temp = g_temp; net = g_net; procs = g_procs;
   gpu = g_gpu; pcbatt = g_batt; pcchg = g_charging;
+  diskR = g_diskR; diskW = g_diskW;
   strncpy(top, g_top, 15); top[15] = '\0';
   connected = g_connected; last = g_lastPacket;
   portEXIT_CRITICAL(&g_mux);
@@ -929,7 +939,7 @@ void loop() {
   if (screenOn) {
     switch (g_view) {
       case VIEW_PET:   viewPet(cpu, ram, temp, net, procs, top, gpu, pcbatt, pcchg, connected, g_frame); break;
-      case VIEW_STATS: viewStats(cpu, ram, temp, net, procs, top, gpu, pcbatt, pcchg, connected);        break;
+      case VIEW_STATS: viewStats(cpu, ram, temp, net, procs, top, gpu, pcbatt, pcchg, connected, diskR, diskW); break;
       case VIEW_GRAPH: viewGraph(cpu, connected);                                     break;
       case VIEW_PROCS: viewProcs(cpu, ram, temp, net, procs, top, connected);         break;
     }

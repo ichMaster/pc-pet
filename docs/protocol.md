@@ -35,6 +35,8 @@ metrics ; cpuList ; ramList
 | 6 | gpu | 0-100 (%), -1 = unknown |
 | 7 | batt | host battery 0-100 (%), -1 = none |
 | 8 | charging | 0 / 1 |
+| 9 | diskR | disk read MB/s, 0-9999 |
+| 10 | diskW | disk write MB/s, 0-9999 |
 
 ### cpuList / ramList sections
 
@@ -59,6 +61,5 @@ then each proc list. Unknown / missing sections are treated as empty.
 - **Config (PC -> device):** a line prefixed `CFG;` carrying thresholds, e.g.
   `CFG;hot=75;panic_cpu=85;panic_ram=92;panic_gpu=95;lowpwr=20;p1=10;p2=30`.
   The device distinguishes config from metrics by the first token.
-- **Disk I/O:** two extra metric fields (read, write MB/s).
 - **Reverse channel (device -> PC, TX notify):** short command codes from a
   whitelist (lock, play/pause, volume, run script, kill top, kill selected).
