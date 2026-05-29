@@ -24,7 +24,8 @@ pc-pet/
 ├── tools/
 │   └── cpu_stress.py             # CPU load generator for testing moods
 ├── docs/
-│   └── protocol.md               # BLE packet protocol reference
+│   ├── protocol.md               # BLE packet protocol reference
+│   └── development-workflow.md   # Claude Code skills usage guide
 ├── specification/
 │   ├── phase1-core-mechanics.md  # Phase 1 issue specs
 │   └── phase1-github-report.md   # upload report (PCP-xxx -> GitHub #)
@@ -37,9 +38,28 @@ pc-pet/
 
 ## Architecture
 
-BLE over the Nordic UART Service. The **device is the peripheral** (GATT
-server); the **PC is the central**, which writes metric packets into the RX
-characteristic. See `docs/protocol.md` for the wire format.
+```
++---------------------------+         BLE (NUS)         +-------------------------+
+|         PC (Central)      | ----------------------->  |   M5StickC Plus2        |
+|                           |    Write Request ~1.5s    |     (Peripheral)        |
+|  +---------------------+  |                           |  +-------------------+  |
+|  |  pc_pet_agent.py    |  |   cpu,ram,temp,net,...    |  |  pc_tamagotchi    |  |
+|  |                     |  |   ;cpuList;ramList        |  |     .ino          |  |
+|  |  psutil  --> metrics |  |                           |  |                   |  |
+|  |  macmon  --> temp/gpu|  |  RX char (6E400002...)    |  |  parsePacket()    |  |
+|  |  bleak   --> BLE     |  |                           |  |  currentMood()    |  |
+|  +---------------------+  |                           |  |  drawPet()        |  |
++---------------------------+                           |  +-------------------+  |
+                                                        |                         |
+                                                        |  LCD  Speaker  IMU      |
+                                                        +-------------------------+
+```
+
+BLE over the Nordic UART Service. The **PC is the central** -- it connects,
+collects system metrics, and writes an ASCII packet into the device's RX
+characteristic every ~1.5 seconds. The **device is the peripheral** (GATT
+server) -- it parses the packet, computes a mood, and renders the pet.
+See `docs/protocol.md` for the wire format.
 
 - Device firmware: Arduino C++ with M5Unified (display/IMU/power/buzzer) and the
   bundled ESP32 BLE library.
@@ -55,13 +75,67 @@ characteristic. See `docs/protocol.md` for the wire format.
 
 ## Build & flash the firmware
 
-1. Arduino IDE 2.x. Add the M5Stack board package via Boards Manager URL
-   `https://static-cdn.m5stack.com/resource/arduino/package_m5stack_index.json`.
-2. Install libraries: M5Unified, M5GFX.
-3. Board: `M5StickCPlus2`. Select the `wchusbserial` port. Close the Serial
-   Monitor before uploading (it holds the port).
-4. Upload. On success you will see `Hard resetting via RTS pin`.
-5. Serial Monitor at 115200 shows boot, BLE connect, and `RX(...)` packet lines.
+### Prerequisites
+
+- **Arduino IDE 2.x** (download from https://www.arduino.cc/en/software)
+- **CH9102 / CH34x USB-serial driver** (macOS): download from
+  https://www.wch-ic.com/downloads/CH34XSER_MAC_ZIP.html -- without it the
+  stick will not appear as a serial port. After installing, the port shows up
+  as `/dev/cu.wchusbserial*`.
+
+### One-time board setup
+
+1. Open Arduino IDE, go to **File > Preferences**.
+2. In **Additional boards manager URLs**, add:
+   ```
+   https://static-cdn.m5stack.com/resource/arduino/package_m5stack_index.json
+   ```
+3. Go to **Tools > Board > Boards Manager**, search for **M5Stack**, and
+   install the **M5Stack** board package (includes ESP32 cores).
+4. Select board: **Tools > Board > M5Stack > M5StickCPlus2**.
+
+### Install libraries
+
+Go to **Tools > Manage Libraries** and install:
+- **M5Unified** (by M5Stack) -- hardware abstraction for display, IMU, power,
+  speaker
+- **M5GFX** (by M5Stack) -- graphics and canvas rendering (installed
+  automatically as a dependency of M5Unified)
+
+The BLE libraries (`BLEDevice`, `BLEServer`, `BLE2902`) are bundled with the
+ESP32 Arduino core and do not need separate installation.
+
+### Flash
+
+1. Connect the M5StickC Plus2 via USB-C.
+2. **Tools > Port** -- select the `wchusbserial` port (e.g.
+   `/dev/cu.wchusbserial14210`). If the port is missing, install the CH9102
+   driver above.
+3. **Close the Serial Monitor** if it is open -- it holds the port and the
+   upload will fail with `serial.serialutil.SerialException`.
+4. Open `firmware/pc_tamagotchi/pc_tamagotchi.ino` and click **Upload**
+   (arrow button).
+5. Wait for compilation and upload. On success the last line reads:
+   ```
+   Hard resetting via RTS pin...
+   ```
+   The stick reboots and the pet appears on screen.
+6. Open **Tools > Serial Monitor** at **115200 baud** to see debug output:
+   boot messages, BLE connect events, and `RX(...)` packet lines when the
+   agent is running.
+
+### Troubleshooting
+
+- **Port not visible:** install the CH9102 driver, unplug and replug the USB
+  cable, or try a different USB-C cable (some are charge-only).
+- **Upload fails with "A fatal error occurred: Failed to connect":** hold the
+  power button for 6 seconds to force-reset, then try again.
+- **Compilation error "BUSY/HOT redefined":** mood enum values must use the
+  `M_` prefix (`M_BUSY`, `M_HOT`) -- the ESP32 ROM headers define unprefixed
+  names.
+- **BLE writes stop arriving after reflash:** toggle Bluetooth off/on on
+  macOS (or reset the Bluetooth module), then restart the agent. macOS caches
+  the GATT table.
 
 ## Run the agent
 
@@ -122,80 +196,11 @@ default) so you can see each state on the device.
 Blobby, Cat, Robo, Ghost, Bunny — cycled with a single click on BtnB. All share
 the same mood-driven expressions; only the body silhouette differs.
 
-## Development workflow (Claude Code skills)
+## Development workflow
 
-Three slash commands automate the spec-to-release pipeline. Run them inside
-Claude Code (`claude` CLI or IDE extension) from the project root.
-
-### /upload-issues -- publish a phase spec to GitHub
-
-Parses a phase specification file, creates GitHub labels (prefixed by phase,
-e.g. `p1::stage:Foundation`), and uploads each issue with its full description,
-acceptance criteria, and dependency links.
-
-```
-/upload-issues @specification/phase1-core-mechanics.md
-```
-
-What it does:
-1. Parses the Issues Summary Table and detailed sections from the spec file.
-2. Shows a summary (issue count, labels) and asks for confirmation.
-3. Creates phase-prefixed labels (`p1::phase:1`, `p1::size:S`, `p1::stage:*`).
-4. Creates issues one by one, mapping PCP-xxx IDs to GitHub issue numbers.
-5. Adds "Blocked by #N" comments for issues with dependencies.
-6. Writes a report to `specification/phase{N}-github-report.md`.
-
-Prerequisites: `gh auth login` (GitHub CLI authenticated).
-
-### /execute-issues -- implement, validate, commit, push
-
-Picks up the GitHub issues created by `/upload-issues` and executes them in
-dependency order: reads the spec, implements the code changes, validates,
-commits (one commit per issue with `Closes #N`), pushes, and closes each issue
-with a summary comment. When every issue in the phase is done it bumps the
-version and tags the release.
-
-```
-/execute-issues p1::phase:1                      # all open issues in phase 1
-/execute-issues p1::phase:1 --issue PCP-003      # single issue
-/execute-issues p1::phase:1 --dry-run            # show plan, change nothing
-```
-
-What it does:
-1. Verifies clean working tree, reads the phase spec + GitHub report.
-2. Builds an execution queue respecting dependency order.
-3. For each issue: implement -> validate -> commit -> push -> close on GitHub.
-4. On failure: reverts changes, comments on the issue, asks whether to continue.
-5. When the full phase completes: bumps version (Phase 1 -> `v0.1.0`), creates
-   `RELEASE.txt`, tags and pushes.
-6. Writes `specification/phase{N}-execution-report.md`.
-
-### /release-version -- manual version bump
-
-Bumps the version, writes release notes, commits, tags, and pushes. Normally
-called automatically by `/execute-issues` on phase completion, but can also be
-run standalone.
-
-```
-/release-version 0.1.0
-/release-version 0.1.1 Fix disk I/O overflow; Add GPU threshold to Stats
-```
-
-What it does:
-1. Validates the version is newer than the current one.
-2. Auto-generates changelog from commits since the last tag (or uses provided items).
-3. Updates `RELEASE.txt` (creates it if missing).
-4. Commits, creates an annotated tag `v{version}`, and pushes.
-
-### Typical workflow
-
-```
-1.  Write specification/phase{N}-*.md        (issue specs with PCP-xxx IDs)
-2.  /upload-issues @specification/phase{N}-*.md   (specs -> GitHub issues)
-3.  /execute-issues p{N}::phase:{N}              (implement all issues)
-    -- or run issues one at a time with --issue PCP-xxx
-4.  /release-version (only if not auto-triggered by step 3)
-```
+Claude Code skills automate the spec-to-release pipeline. See
+[docs/development-workflow.md](docs/development-workflow.md) for details on
+`/upload-issues`, `/execute-issues`, and `/release-version`.
 
 ## Known notes
 
