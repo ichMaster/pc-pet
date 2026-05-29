@@ -1,0 +1,6 @@
+Version 0.1.0 (2026-05-29)
+---------------------------
+- PCP-001 One-second tick: stable 1 Hz millis-based counter for panic duration tracking
+- PCP-002 Buzzer patterns: reusable melody system replacing all hardcoded tone calls
+- PCP-003 Panic tiers: 3 escalating visual/audio states by continuous panic duration
+- PCP-004 Disk I/O metrics: disk read/write throughput in agent packet and Stats screen
