@@ -196,6 +196,91 @@ default) so you can see each state on the device.
 Blobby, Cat, Robo, Ghost, Bunny — cycled with a single click on BtnB. All share
 the same mood-driven expressions; only the body silhouette differs.
 
+## Behavior
+
+### Moods
+
+The pet's mood is computed on-device from the latest metrics. When multiple
+conditions are true, the first match wins (priority order top to bottom):
+
+| Mood | Condition | Look |
+|---|---|---|
+| HOT | temp >= 75 C | orange body, wide eyes, open mouth, sweat |
+| PANIC | cpu >= 85% OR ram >= 92% OR gpu >= 95% | red body, shaking, wide eyes, sweat |
+| LOW PWR | battery 0-19% and not charging | muted gray, droopy half-closed eyes |
+| STUFFED | ram >= 85% | brown-ish body, flat mouth |
+| BUSY | cpu >= 50% OR gpu >= 60% | yellow body, bouncing, little legs, darting eyes |
+| SLEEP | cpu < 15% AND gpu < 15% | blue body, closed eyes, floating Zzz |
+| HAPPY | everything else (default) | green body, smile, gentle breathing |
+
+When the agent is not connected, the pet shows SLEEP with a "waiting" message.
+
+### Panic tiers
+
+If the PC stays in PANIC continuously, the pet's distress escalates through
+three tiers. It reverts instantly to its normal mood as soon as panic clears.
+
+| Tier | Duration | Visual | Sound | Mood word |
+|---|---|---|---|---|
+| 1 | 0 -- 9 s | standard panic look | MEL_ALERT on entry | PANIC!! |
+| 2 | 10 -- 29 s | darker red body, 4 px jitter, extra sweat | MEL_PANIC2 | PANIC!!! |
+| 3 | 30 s+ | desaturated body, half-closed eyes, wavy mouth, pulsing red overlay | MEL_PANIC3 | CRITICAL |
+
+### Connection and data flow
+
+The agent samples system metrics every **1.5 seconds** (configurable with
+`--interval`) and writes an ASCII packet to the device over BLE. The device
+treats the link as stale if no packet arrives for **6 seconds** and falls back
+to SLEEP / "waiting."
+
+On disconnect the device re-advertises automatically. The agent reconnects on
+the next scan cycle.
+
+### Screen power management
+
+The screen dims and eventually turns off to save power when idle:
+
+| State | Trigger | Brightness |
+|---|---|---|
+| Full | activity (button, shake, alert mood) | 110 |
+| Dim | 10 s idle | 55 |
+| Off | 30 s idle | 0 (rendering skipped) |
+
+The screen wakes on:
+- Any button press
+- Sustained strong shake (acceleration > 1.2 g for 750 ms)
+- Alert mood (HOT or PANIC keep the screen fully awake automatically)
+- Low battery alert
+
+Frame rate is ~18 fps (55 ms loop) when the screen is on, ~6.7 fps (150 ms)
+when off.
+
+### Low battery alert
+
+When the M5Stick's own battery drops below **10%**, the device plays a
+descending two-tone beep (MEL_LOWBATT) and wakes the screen. The alert
+repeats every **2 minutes** as long as the battery stays low.
+
+### Mute
+
+Double-click BtnB to toggle mute. When muted, all sounds are suppressed --
+button clicks, mood alerts, panic tier transitions, and low battery beeps.
+The top bar shows "mute" in orange. Unmuting plays a short confirmation tone.
+
+### Sounds
+
+Each event has a distinct melody played through the `playMelody()` system:
+
+| Event | Melody | Notes |
+|---|---|---|
+| BtnA click | MEL_CLICK | 1500 Hz, 30 ms |
+| BtnB character switch | MEL_CHARSWITCH | 1700 Hz, 30 ms |
+| Unmute | MEL_MUTE_OFF | 1800 Hz, 40 ms |
+| Mood escalation (enter PANIC/HOT) | MEL_ALERT | 2300 Hz x2 |
+| Panic tier 2 transition | MEL_PANIC2 | 4-note rising pattern |
+| Panic tier 3 transition | MEL_PANIC3 | 5-note urgent pattern |
+| Low battery | MEL_LOWBATT | 800 Hz descending to 600 Hz |
+
 ## Development workflow
 
 Claude Code skills automate the spec-to-release pipeline. See
