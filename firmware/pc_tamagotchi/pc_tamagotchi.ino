@@ -323,20 +323,20 @@ void setup() {
 // =================  helpers  ==================================
 
 // ---- melody system (PCP-002) ----
-struct Note { uint16_t freq; uint16_t durMs; uint16_t pauseMs; };
+struct MelNote { uint16_t freq; uint16_t durMs; uint16_t pauseMs; };
 
-const Note MEL_ALERT[]      = { {2300, 90, 20}, {2300, 90, 0}, {0,0,0} };
-const Note MEL_PANIC1[]     = { {2000, 100, 50}, {2400, 100, 0}, {0,0,0} };
-const Note MEL_PANIC2[]     = { {2000, 80, 40}, {2400, 80, 40}, {2000, 80, 40}, {2400, 80, 0}, {0,0,0} };
-const Note MEL_PANIC3[]     = { {2600, 60, 30}, {2200, 60, 30}, {2600, 60, 30}, {2200, 60, 30}, {2800, 120, 0}, {0,0,0} };
-const Note MEL_LOWPWR[]     = { {1200, 120, 20}, {900, 200, 0}, {0,0,0} };
-const Note MEL_LOWBATT[]    = { {800, 150, 30}, {600, 200, 0}, {0,0,0} };
-const Note MEL_CLICK[]      = { {1500, 30, 0}, {0,0,0} };
-const Note MEL_CHARSWITCH[] = { {1700, 30, 0}, {0,0,0} };
-const Note MEL_MUTE_ON[]    = { {600, 40, 0}, {0,0,0} };
-const Note MEL_MUTE_OFF[]   = { {1800, 40, 0}, {0,0,0} };
+const MelNoteMEL_ALERT[]      = { {2300, 90, 20}, {2300, 90, 0}, {0,0,0} };
+const MelNoteMEL_PANIC1[]     = { {2000, 100, 50}, {2400, 100, 0}, {0,0,0} };
+const MelNoteMEL_PANIC2[]     = { {2000, 80, 40}, {2400, 80, 40}, {2000, 80, 40}, {2400, 80, 0}, {0,0,0} };
+const MelNoteMEL_PANIC3[]     = { {2600, 60, 30}, {2200, 60, 30}, {2600, 60, 30}, {2200, 60, 30}, {2800, 120, 0}, {0,0,0} };
+const MelNoteMEL_LOWPWR[]     = { {1200, 120, 20}, {900, 200, 0}, {0,0,0} };
+const MelNoteMEL_LOWBATT[]    = { {800, 150, 30}, {600, 200, 0}, {0,0,0} };
+const MelNoteMEL_CLICK[]      = { {1500, 30, 0}, {0,0,0} };
+const MelNoteMEL_CHARSWITCH[] = { {1700, 30, 0}, {0,0,0} };
+const MelNoteMEL_MUTE_ON[]    = { {600, 40, 0}, {0,0,0} };
+const MelNoteMEL_MUTE_OFF[]   = { {1800, 40, 0}, {0,0,0} };
 
-void playMelody(const Note* mel) {
+void playMelody(const MelNote* mel) {
   if (g_mute || !mel) return;
   for (int i = 0; mel[i].freq != 0; i++) {
     M5.Speaker.tone(mel[i].freq, mel[i].durMs);
