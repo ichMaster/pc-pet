@@ -5,7 +5,7 @@ computer. The PC streams metrics (CPU, RAM, GPU, temperature, network, disk,
 battery, top processes) to the device over BLE; the device renders an animated
 pet plus several info screens.
 
-<video src="docs/images/demo.mp4" autoplay loop muted playsinline></video>
+![Demo](docs/images/demo.gif)
 
 
 ## Layout
