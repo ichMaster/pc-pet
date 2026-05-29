@@ -106,6 +106,11 @@ const uint32_t LOW_BATT_REPEAT = 120000;   // re-beep every 2 min while low
 bool     g_battWasLow  = false;
 uint32_t g_lastBattBeep = 0;
 
+// ---- 1 Hz tick (PCP-001) ----
+uint32_t g_lastTick1s = 0;
+uint32_t g_uptimeSec  = 0;
+uint32_t g_panicSec   = 0;
+
 M5Canvas canvas(&M5.Display);
 
 // =================  BLE callbacks  ============================
@@ -813,6 +818,16 @@ void loop() {
     M5.Speaker.tone(2300, 90);
   }
   g_prevMood = mood;
+
+  // ---- 1 Hz tick ----
+  if (millis() - g_lastTick1s >= 1000) {
+    g_lastTick1s = millis();
+    g_uptimeSec++;
+    if (mood == M_PANIC)
+      g_panicSec++;
+    else
+      g_panicSec = 0;
+  }
 
   // ---- screen power management ----
   // Stay fully awake while the pet is in an alert state.
