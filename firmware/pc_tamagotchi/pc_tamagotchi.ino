@@ -54,14 +54,17 @@ int     g_histPos = 0;
 
 // ---- pet moods ----------------------------------------------
 enum Mood { M_SLEEP, M_HAPPY, M_BUSY, M_STUFFED, M_HOT, M_PANIC, M_LOWPWR };
-const char* moodWord(Mood m) {
+const char* moodWord(Mood m, int tier = 1) {
   switch (m) {
     case M_SLEEP:   return "zzz...";
     case M_HAPPY:   return "chillin";
     case M_BUSY:    return "workin'";
     case M_STUFFED: return "so full";
     case M_HOT:     return "too hot!";
-    case M_PANIC:   return "PANIC!!";
+    case M_PANIC:
+      if (tier >= 3) return "CRITICAL";
+      if (tier >= 2) return "PANIC!!!";
+      return "PANIC!!";
     case M_LOWPWR:  return "low pwr";
   }
   return "";
@@ -369,6 +372,16 @@ uint16_t bodyColor(Mood m) {
   return TFT_WHITE;
 }
 
+// ---- panic tiers (PCP-003) ----
+const uint32_t PANIC_T1 = 10;
+const uint32_t PANIC_T2 = 30;
+
+int panicTier(uint32_t sec) {
+  if (sec >= PANIC_T2) return 3;
+  if (sec >= PANIC_T1) return 2;
+  return 1;
+}
+
 // draw a small horizontal bar
 void drawBar(int x, int y, int w, int h, int pct, uint16_t col) {
   canvas.drawRoundRect(x, y, w, h, 2, canvas.color565(70, 70, 80));
@@ -431,13 +444,16 @@ void drawCharBody(int cx, int cy, int rx, int ry, uint16_t col, int charId) {
 // ----------- the creature ------------------------------------
 void drawPet(int cx, int cy, Mood mood, uint32_t frame) {
   float t = frame * 0.18f;
+  int tier = (mood == M_PANIC) ? panicTier(g_panicSec) : 0;
   uint16_t col = bodyColor(mood);
+  if (tier == 2) col = lerpColor(col, canvas.color565(180, 50, 40), 0.5f);
+  if (tier == 3) col = lerpColor(col, canvas.color565(140, 120, 130), 0.7f);
 
   // motion per mood
   float breathe = 1.0f + 0.05f * sinf(t);      // idle breathing
   int   jitter  = 0;                            // panic shake
   int   bounceY = 0;
-  if (mood == M_PANIC) jitter = (frame % 2) ? 2 : -2;
+  if (mood == M_PANIC) jitter = (frame % 2) ? (tier >= 2 ? 4 : 2) : -(tier >= 2 ? 4 : 2);
   if (mood == M_BUSY)  bounceY = (int)(3 * fabsf(sinf(t * 1.6f)));
   if (mood == M_HAPPY) bounceY = (int)(2 * sinf(t));
 
@@ -478,8 +494,15 @@ void drawPet(int cx, int cy, Mood mood, uint32_t frame) {
     canvas.fillCircle(cx + ex, cy + ey + 3, 2, TFT_BLACK);
     canvas.fillRect(cx - ex - er, cy + ey - er, er * 2, er, col);   // heavy lids
     canvas.fillRect(cx + ex - er, cy + ey - er, er * 2, er, col);
+  } else if (tier == 3) {
+    canvas.fillCircle(cx - ex, cy + ey + 1, er - 1, TFT_WHITE);
+    canvas.fillCircle(cx + ex, cy + ey + 1, er - 1, TFT_WHITE);
+    canvas.fillCircle(cx - ex, cy + ey + 3, 2, TFT_BLACK);
+    canvas.fillCircle(cx + ex, cy + ey + 3, 2, TFT_BLACK);
+    canvas.fillRect(cx - ex - er, cy + ey - er, er * 2, er, col);
+    canvas.fillRect(cx + ex - er, cy + ey - er, er * 2, er, col);
   } else {
-    int wide = (mood == M_PANIC || mood == M_HOT) ? 2 : 0;   // wide eyes when stressed
+    int wide = (mood == M_PANIC || mood == M_HOT) ? 2 : 0;
     canvas.fillCircle(cx - ex, cy + ey, er + wide, TFT_WHITE);
     canvas.fillCircle(cx + ex, cy + ey, er + wide, TFT_WHITE);
     int pup = (mood == M_PANIC) ? 2 : 3;
@@ -503,8 +526,14 @@ void drawPet(int cx, int cy, Mood mood, uint32_t frame) {
       canvas.drawArc(cx, my + 6, 10, 8, 200, 340, TFT_BLACK); break;   // slight frown
     case M_HOT:
     case M_PANIC:
-      canvas.fillEllipse(cx, my + 2, 7, 9, TFT_BLACK);
-      canvas.fillEllipse(cx, my + 4, 4, 4, canvas.color565(200, 60, 60)); break;
+      if (tier == 3) {
+        for (int i = -8; i <= 8; i++)
+          canvas.fillCircle(cx + i, my + (int)(3 * sinf(i * 0.6f + t)), 1, TFT_BLACK);
+      } else {
+        canvas.fillEllipse(cx, my + 2, 7, 9, TFT_BLACK);
+        canvas.fillEllipse(cx, my + 4, 4, 4, canvas.color565(200, 60, 60));
+      }
+      break;
   }
 
   // sweat drops when hot / panic
@@ -513,6 +542,17 @@ void drawPet(int cx, int cy, Mood mood, uint32_t frame) {
     canvas.fillCircle(cx + rx - 2, cy - 6 + dy, 3, canvas.color565(120, 200, 255));
     canvas.fillCircle(cx - rx + 1, cy - 2 + (dy + 8) % 20, 2,
                       canvas.color565(120, 200, 255));
+    if (tier >= 2) {
+      canvas.fillCircle(cx + rx - 8, cy - 10 + (dy + 5) % 20, 2, canvas.color565(120, 200, 255));
+      canvas.fillCircle(cx - rx + 7, cy - 8  + (dy + 12) % 20, 2, canvas.color565(120, 200, 255));
+    }
+  }
+
+  // tier 3: pulsing red overlay
+  if (tier == 3) {
+    float pulse = 0.15f + 0.1f * sinf(t * 0.5f);
+    uint16_t overlay = lerpColor(col, canvas.color565(255, 40, 40), pulse);
+    canvas.fillEllipse(cx, cy, rx - 4, ry - 4, overlay);
   }
 
   // Zzz when sleeping
@@ -583,7 +623,8 @@ void viewPet(int cpu, int ram, int temp, int net, int procs,
   canvas.setTextDatum(middle_center);
   canvas.setTextColor(TFT_WHITE);
   canvas.setTextSize(2);
-  canvas.drawString(connected ? moodWord(mood) : "waiting", canvas.width() / 2, 150);
+  int tier = (mood == M_PANIC) ? panicTier(g_panicSec) : 1;
+  canvas.drawString(connected ? moodWord(mood, tier) : "waiting", canvas.width() / 2, 150);
 
   // top process
   canvas.setTextSize(1);
@@ -844,10 +885,17 @@ void loop() {
   if (millis() - g_lastTick1s >= 1000) {
     g_lastTick1s = millis();
     g_uptimeSec++;
-    if (mood == M_PANIC)
+    if (mood == M_PANIC) {
       g_panicSec++;
-    else
+      int tier = panicTier(g_panicSec);
+      int prevTier = panicTier(g_panicSec - 1);
+      if (tier != prevTier) {
+        if (tier == 2) playMelody(MEL_PANIC2);
+        if (tier == 3) playMelody(MEL_PANIC3);
+      }
+    } else {
       g_panicSec = 0;
+    }
   }
 
   // ---- screen power management ----
