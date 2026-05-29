@@ -31,6 +31,9 @@
 
 #define DEVICE_NAME  "PCpet"
 
+// ---- melody types (must be before Arduino auto-prototypes) ----
+struct MelNote { uint16_t freq; uint16_t durMs; uint16_t pauseMs; };
+
 // ---- shared state (written by BLE task, read by main loop) ---
 portMUX_TYPE g_mux = portMUX_INITIALIZER_UNLOCKED;
 volatile int  g_cpu = 0, g_ram = 0, g_temp = -1, g_net = 0, g_procs = 0;
@@ -323,8 +326,6 @@ void setup() {
 // =================  helpers  ==================================
 
 // ---- melody system (PCP-002) ----
-struct MelNote { uint16_t freq; uint16_t durMs; uint16_t pauseMs; };
-
 const MelNote MEL_ALERT[]      = { {2300, 90, 20}, {2300, 90, 0}, {0,0,0} };
 const MelNote MEL_PANIC1[]     = { {2000, 100, 50}, {2400, 100, 0}, {0,0,0} };
 const MelNote MEL_PANIC2[]     = { {2000, 80, 40}, {2400, 80, 40}, {2000, 80, 40}, {2400, 80, 0}, {0,0,0} };
