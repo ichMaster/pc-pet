@@ -128,6 +128,14 @@ float    g_envHum     = 0;    // relative humidity, %
 float    g_envPress   = 0;    // barometric pressure, hPa
 uint32_t g_lastEnvRead = 0;
 
+// ---- pressure trend (PCP-007): slow ring buffer for a barometer ----
+const int      PRESS_HIST = 60;          // samples kept
+float          g_pressHist[PRESS_HIST];
+int            g_pressHistN = 0;         // number of valid samples
+int            g_pressHistPos = 0;       // next write index
+uint32_t       g_lastPressLog = 0;
+const uint32_t PRESS_LOG_MS = 60000;     // log once per minute
+
 M5Canvas canvas(&M5.Display);
 
 // =================  BLE callbacks  ============================
@@ -407,6 +415,20 @@ int panicTier(uint32_t sec) {
   if (sec >= PANIC_T2) return 3;
   if (sec >= PANIC_T1) return 2;
   return 1;
+}
+
+// Pressure trend (PCP-007): +1 rising / -1 falling / 0 steady, over the logged
+// window. Returns 0 until enough samples exist (no false trend).
+int pressTrend() {
+  if (g_pressHistN < 3) return 0;
+  int oldest = (g_pressHistN < PRESS_HIST)
+                 ? 0
+                 : g_pressHistPos;                 // ring start when full
+  int newest = (g_pressHistPos - 1 + PRESS_HIST) % PRESS_HIST;
+  float delta = g_pressHist[newest] - g_pressHist[oldest];
+  if (delta > 0.5f)  return 1;
+  if (delta < -0.5f) return -1;
+  return 0;
 }
 
 // draw a small horizontal bar
@@ -937,6 +959,14 @@ void loop() {
     g_lastEnvRead = millis();
     if (g_sht30.update())   { g_envTemp = g_sht30.cTemp; g_envHum = g_sht30.humidity; }
     if (g_qmp6988.update()) { g_envPress = g_qmp6988.pressure / 100.0f; }  // Pa -> hPa
+  }
+
+  // ---- pressure trend log (PCP-007): ~1/min ring buffer ----
+  if (g_envPresent && g_envPress > 0 && millis() - g_lastPressLog >= PRESS_LOG_MS) {
+    g_lastPressLog = millis();
+    g_pressHist[g_pressHistPos] = g_envPress;
+    g_pressHistPos = (g_pressHistPos + 1) % PRESS_HIST;
+    if (g_pressHistN < PRESS_HIST) g_pressHistN++;
   }
 
   // ---- screen power management ----
