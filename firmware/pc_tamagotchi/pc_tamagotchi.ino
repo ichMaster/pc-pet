@@ -728,6 +728,13 @@ void viewPet(int cpu, int ram, int temp, int net, int procs,
   snprintf(foot, sizeof(foot), "%s  %s  %s", ts, gs, pb);
   canvas.setTextDatum(middle_center);
   canvas.drawString(foot, canvas.width() / 2, 224);
+
+  // ENV modifier badge (PCP-008): subtle, top-left under the bar
+  if (emod != ENV_NONE) {
+    canvas.setTextDatum(top_left);
+    canvas.setTextColor(canvas.color565(200, 180, 120));
+    canvas.drawString(emod == ENV_STUFFY ? "stuffy" : "weather", 4, 20);
+  }
 }
 
 void viewStats(int cpu, int ram, int temp, int net, int procs,
@@ -1041,6 +1048,7 @@ void loop() {
       case VIEW_STATS: viewStats(cpu, ram, temp, net, procs, top, gpu, pcbatt, pcchg, connected, diskR, diskW); break;
       case VIEW_GRAPH: viewGraph(cpu, connected);                                     break;
       case VIEW_PROCS: viewProcs(cpu, ram, temp, net, procs, top, connected);         break;
+      case VIEW_ENV:   viewEnv(cpu, ram, temp, net, procs, top, connected);           break;
     }
     canvas.pushSprite(0, 0);
   }
