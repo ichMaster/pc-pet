@@ -8,7 +8,8 @@ telemetry path adds an agent + protocol change.
 
 Scope decisions (from ROADMAP open questions):
 - **ENV-to-PC telemetry: included** (PCP-009) -- device sends ENV over the TX
-  notify characteristic; the agent logs it.
+  notify characteristic; the agent reviews it via an append-only `env_log.csv`
+  (timestamped) plus a one-line console echo. No GUI/plot tool in scope.
 - **ENV mood modifier: included** (PCP-008) -- stuffy-room and weather-turning
   influences.
 
@@ -21,6 +22,7 @@ Scope decisions (from ROADMAP open questions):
 | 3 | PCP-007 | Pressure trend log | S | 3 -- Trend | PCP-005, PCP-006 |
 | 4 | PCP-008 | ENV mood modifier | M | 4 -- Mood | PCP-005, PCP-007 |
 | 5 | PCP-009 | ENV telemetry to PC | M | 5 -- Telemetry | PCP-005 |
+| 6 | PCP-010 | ENV log retention (rotation) | S | 5 -- Telemetry | PCP-009 |
 
 **Size legend:** S = 1-2 days, M = 3-5 days, L = 5-8 days
 
@@ -35,9 +37,9 @@ Scope decisions (from ROADMAP open questions):
         |            |            |                  |
     PCP-006      (PCP-007      PCP-009            (PCP-008 also
     (ENV screen)  needs 006)   (telemetry)        needs 007)
-        |            |
-        +-----+------+
-              |
+        |            |            |
+        +-----+------+        PCP-010
+              |              (log retention)
           PCP-007 (pressure trend)
               |
           PCP-008 (mood modifier)
@@ -48,6 +50,7 @@ Scope decisions (from ROADMAP open questions):
 - PCP-005 must land first -- it provides the sensor reads everything else uses.
 - PCP-009 (telemetry) is independent of the screen/trend/mood chain -- it only
   needs PCP-005, so it can run in parallel with PCP-006/007/008.
+- PCP-010 (retention) is a small agent-only follow-up to PCP-009.
 - PCP-006 -> PCP-007 -> PCP-008 form a sequential chain (screen, then trend on
   the screen, then mood modifier that reuses the trend).
 
@@ -308,10 +311,25 @@ must not affect the existing PC -> device metric path.
   - Subscribe to the TX characteristic with `start_notify`.
   - Parse `ENV;...` lines; ignore anything that is not an ENV line (forward-compat
     for future reverse-channel commands).
-  - Log the parsed values (stdout line and/or an append-only CSV, e.g.
-    `env_log.csv` with a timestamp). Keep it simple; no DB.
+  - **Review mechanism: append-only CSV + console echo** (decided).
+    - Append a timestamped row to `env_log.csv` for each reading, with a header
+      written once if the file is new:
+      ```
+      timestamp,temp_c,humidity_pct,pressure_hpa
+      2026-05-30T14:03:21,23.4,45,1013
+      ```
+      Use an ISO-8601 local timestamp. The CSV is the durable artifact the user
+      reviews -- open it in Numbers/Excel or feed it to a plotting script.
+    - Echo each reading to the agent console as a one-line summary, e.g.
+      `[env] 23.4C  45%  1013hPa`, so the link is visibly working at a glance.
+    - Make the CSV path configurable via a CLI flag (e.g. `--env-log env_log.csv`,
+      default `env_log.csv` in the working directory); allow disabling with an
+      empty value.
+  - Keep it simple; no database, no plotting tool (a plot script is out of scope
+    for this issue).
   - Make logging non-blocking with the asyncio BLE loop (the notify handler must
-    not block).
+    not block -- open the file in append mode and write a single line per event;
+    do not hold the file open across awaits).
 - **Backward compatibility:** old agent (no `start_notify`) simply ignores the
   notifications; new agent + old firmware (no ENV notify) just never receives ENV
   lines. Neither path breaks.
@@ -329,8 +347,73 @@ old/new mixes of agent and firmware.
 - [ ] `docs/protocol.md` documents the `ENV;...` TX notify line
 - [ ] Device sends `ENV;temp=..;hum=..;press=..` over TX notify on a slow cadence when connected + HAT present
 - [ ] Agent subscribes via `start_notify` and parses ENV lines
-- [ ] Agent logs ENV readings (stdout and/or CSV with timestamp)
+- [ ] Agent appends timestamped rows to `env_log.csv` (header written once: `timestamp,temp_c,humidity_pct,pressure_hpa`)
+- [ ] Agent echoes each reading to the console as a one-line summary
+- [ ] CSV path configurable via CLI flag; logging can be disabled
+- [ ] Opening `env_log.csv` in a spreadsheet shows the logged history
 - [ ] Notify handler does not block the asyncio BLE loop
 - [ ] No ENV sent when HAT absent or disconnected
 - [ ] Existing PC -> device metric path unchanged
 - [ ] Files changed: `firmware/pc_tamagotchi/pc_tamagotchi.ino`, `agent/pc_pet_agent.py`, `docs/protocol.md`
+
+---
+
+### PCP-010 -- ENV log retention (size-based rotation)
+
+**Description:**
+`env_log.csv` from PCP-009 grows without bound (~250 KB/day at a 5-10 s cadence).
+Add size-based rotation so total disk usage stays bounded. This is an agent-only
+follow-up to PCP-009 and does not touch the device. Rotation is append-only
+friendly: it renames whole files (no in-place rewrite of the active log), which
+is the safest approach while the agent is actively appending.
+
+**What needs to be done:**
+- Add two CLI flags to the agent:
+  - `--env-log-max-bytes` (default `5_000_000`, ~5 MB) -- rotate when the active
+    log reaches this size.
+  - `--env-log-keep` (default `5`) -- how many rotated files to retain.
+  - Total disk is bounded by `(keep + 1) * max_bytes` (~30 MB at defaults).
+- Before appending each row (or after, then check), test the active file size.
+  Prefer tracking a running byte counter updated on each write to avoid a
+  `stat()` on every event; fall back to `os.path.getsize` on startup.
+- When the active log reaches `--env-log-max-bytes`, rotate (logrotate style):
+  1. If `env_log.csv.{keep}` exists, delete it (oldest).
+  2. Shift `env_log.csv.{i}` -> `env_log.csv.{i+1}` for `i` from `keep-1` down to 1.
+  3. `os.replace(env_log.csv, env_log.csv.1)` (atomic rename).
+  4. Create a fresh `env_log.csv` and write the header row once.
+  - Use `os.replace` / `os.rename` (atomic on the same filesystem); never copy
+    + truncate the active file while appending.
+- Derive rotated names from the configured log path (respect `--env-log` from
+  PCP-009): `<path>` -> `<path>.1`, `<path>.2`, ...
+- Handle edge cases:
+  - Missing intermediate rotated files (gaps) -- skip cleanly.
+  - Logging disabled (empty `--env-log`) -- retention is a no-op.
+  - Rotation must not block the asyncio BLE loop (a handful of `os.replace`
+    calls; keep it synchronous and fast, no awaits mid-rotation).
+- Keep it dependency-free (stdlib `os` only) -- do NOT pull in
+  `logging.handlers.RotatingFileHandler` unless it fits cleanly without
+  reshaping the CSV writes (the file is a CSV with a header, not a log stream).
+- Document the flags in the README agent section.
+- Do NOT add compression (gzip) of rotated files -- out of scope for this issue
+  (note it as a possible future enhancement).
+- Do NOT add age-based pruning -- size rotation is the chosen policy.
+
+**Dependencies:** PCP-009
+
+**Expected result:**
+`env_log.csv` rotates to `env_log.csv.1 .. .N` once it reaches the size cap,
+the oldest rotated file is discarded, and total disk for ENV logs stays bounded.
+Each fresh active log starts with the CSV header.
+
+**Acceptance criteria:**
+- [ ] `--env-log-max-bytes` and `--env-log-keep` flags added with sensible defaults
+- [ ] Active log rotates to `.1` when it reaches the size cap
+- [ ] Older rotated files shift up; the oldest beyond `keep` is deleted
+- [ ] Rotation uses atomic `os.replace` (no in-place rewrite of the active log)
+- [ ] Fresh active log after rotation starts with the CSV header row
+- [ ] Total disk bounded by `(keep + 1) * max_bytes`
+- [ ] Retention is a no-op when logging is disabled
+- [ ] Rotation does not block the asyncio BLE loop
+- [ ] No new dependencies (stdlib only)
+- [ ] README documents the retention flags
+- [ ] Files changed: `agent/pc_pet_agent.py`, `README.md`
