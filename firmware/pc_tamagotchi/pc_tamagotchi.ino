@@ -43,6 +43,7 @@ volatile int  g_diskR = 0, g_diskW = 0;
 char          g_top[16] = "-";
 volatile bool g_connected = false;
 volatile uint32_t g_lastPacket = 0;
+BLECharacteristic* g_txChar = nullptr;   // device -> PC notify (PCP-009)
 
 // top processes (written + read on the main task -> no mutex needed)
 #define NPROC 4
@@ -135,6 +136,10 @@ int            g_pressHistN = 0;         // number of valid samples
 int            g_pressHistPos = 0;       // next write index
 uint32_t       g_lastPressLog = 0;
 const uint32_t PRESS_LOG_MS = 60000;     // log once per minute
+
+// ---- ENV telemetry to PC (PCP-009) ----
+uint32_t       g_lastEnvSend = 0;
+const uint32_t ENV_SEND_MS = 5000;       // notify every ~5 s when connected
 
 M5Canvas canvas(&M5.Display);
 
@@ -330,6 +335,7 @@ void setup() {
   BLECharacteristic* tx = svc->createCharacteristic(
       CHAR_TX_UUID, BLECharacteristic::PROPERTY_NOTIFY);
   tx->addDescriptor(new BLE2902());
+  g_txChar = tx;   // PCP-009: keep a handle for ENV notify from loop()
 
   svc->start();
 
@@ -675,6 +681,12 @@ void viewPet(int cpu, int ram, int temp, int net, int procs,
              bool connected, uint32_t frame) {
   Mood mood = connected ? currentMood(cpu, ram, temp, gpu, batt, charging) : M_SLEEP;
 
+  // ENV mood modifier (PCP-008): only nudges the display when the PC mood is
+  // calm (M_HAPPY). PC alert states (PANIC/HOT/LOWPWR/STUFFED/BUSY) always win.
+  // STUFFY shows the stuffed face; WEATHER only shows a small badge.
+  EnvMod emod = (mood == M_HAPPY) ? envModifier() : ENV_NONE;
+  if (emod == ENV_STUFFY) mood = M_STUFFED;
+
   // background tint subtly follows mood
   uint16_t bg = lerpColor(canvas.color565(16, 18, 24),
                           bodyColor(mood), connected ? 0.10f : 0.0f);
@@ -982,6 +994,17 @@ void loop() {
     g_pressHist[g_pressHistPos] = g_envPress;
     g_pressHistPos = (g_pressHistPos + 1) % PRESS_HIST;
     if (g_pressHistN < PRESS_HIST) g_pressHistN++;
+  }
+
+  // ---- ENV telemetry to PC (PCP-009): device -> PC over TX notify ----
+  if (g_envPresent && connected && g_txChar &&
+      millis() - g_lastEnvSend >= ENV_SEND_MS) {
+    g_lastEnvSend = millis();
+    char line[48];
+    snprintf(line, sizeof(line), "ENV;temp=%.1f;hum=%d;press=%d",
+             g_envTemp, (int)(g_envHum + 0.5f), (int)(g_envPress + 0.5f));
+    g_txChar->setValue((uint8_t*)line, strlen(line));
+    g_txChar->notify();
   }
 
   // ---- screen power management ----
