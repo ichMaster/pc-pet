@@ -1,3 +1,14 @@
+Version 0.3.0 (2026-05-30)
+---------------------------
+- PCP-012 SPK2 audio routing + HAT mode select (compile-time HAT_SELECT; MAX98357 I2S)
+- PCP-013 UI sound cues + non-blocking panic siren (escalates with tiers, instant revert)
+- PCP-014 mood ambient loops (quiet per-mood voice on a dedicated channel)
+- PCP-015 event voice notifications (boot / overheat / low-power / back-online; synth placeholders)
+- PCP-016 heartbeat (CPU-paced) + reactive chirps on sharp metric changes
+- Refactor: firmware split into component tabs (config / state / ble / audio / mood / render)
+- NOTE: Phase 3 audio is UNVERIFIED -- not yet compiled or tested on an SPK2 amp;
+  ENV III remains the verified configuration. Verify an Arduino build before relying on SPK2.
+
 Version 0.2.1 (2026-05-30)
 ---------------------------
 - Fix: ENV III HAT now works -- sensors are on the Wire bus (G0/G26), not Wire1 (spec was wrong)
