@@ -62,7 +62,7 @@ Scope decisions (from ROADMAP open questions):
 
 ## Stage 1 -- Sensors
 
-### PCP-005 -- ENV III sensor bring-up (SHT30 + QMP6988 on Wire1)
+### PCP-005 -- ENV III sensor bring-up (SHT30 + QMP6988 on Wire)
 
 **Description:**
 Bring up the ENV III HAT over a dedicated I2C bus and expose its readings as
@@ -81,10 +81,10 @@ PC -- no BLE involvement in this issue.
   SHT3X    g_sht30;
   QMP6988  g_qmp6988;
   ```
-  Init in `setup()` on `Wire1` with the HAT pins (G0 = SDA, G26 = SCL):
+  Init in `setup()` on `Wire` with the HAT pins (G0 = SDA, G26 = SCL):
   ```cpp
-  bool sht_ok = g_sht30.begin(&Wire1, SHT3X_I2C_ADDR, 0, 26, 400000U);
-  bool qmp_ok = g_qmp6988.begin(&Wire1, QMP6988_SLAVE_ADDRESS_L, 0, 26, 400000U);
+  bool sht_ok = g_sht30.begin(&Wire, SHT3X_I2C_ADDR, 0, 26, 400000U);
+  bool qmp_ok = g_qmp6988.begin(&Wire, QMP6988_SLAVE_ADDRESS_L, 0, 26, 400000U);
   g_envPresent = sht_ok && qmp_ok;
   ```
 - **Presence check is mandatory.** G0 is a strap pin; a sensor on (0,26) can
@@ -123,7 +123,7 @@ Without the HAT, the device runs exactly as before.
 
 **Acceptance criteria:**
 - [ ] M5Unit-ENV library added and documented in README
-- [ ] SHT30 (0x44) and QMP6988 (0x70) initialized on `Wire1.begin(0, 26)`
+- [ ] SHT30 (0x44) and QMP6988 (0x70) initialized on `Wire.begin(0, 26)`
 - [ ] Boot serial line reports ENV present/absent
 - [ ] With the HAT attached, `g_envTemp` / `g_envHum` / `g_envPress` show plausible live values (temp ~20-28 C, humidity ~30-60%, pressure ~980-1030 hPa)
 - [ ] Without the HAT, the device boots and runs normally (presence check skips ENV)

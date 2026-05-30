@@ -111,7 +111,7 @@ each split into two tasks). In short:
    continuous-panic duration (`p1`/`p2`), instant revert when panic clears. No
    persistence. Thresholds hardcoded until 8b.
 4. **#6 disk I/O:** two extra metric fields (read/write MB/s) + a Stats line.
-5. **#7 ENV III:** read **SHT30 (0x44) + QMP6988 (0x70)** over `Wire1.begin(0, 26)`
+5. **#7 ENV III:** read **SHT30 (0x44) + QMP6988 (0x70)** over `Wire.begin(0, 26)`
    using the M5Unit-ENV library (ENV III path, not BMP280). Add an ENV screen and
    an optional mood modifier. Autonomous from the PC link; presence-check on init.
 6. **8b threshold config channel:** a `CFG;`-prefixed line (agent -> device over

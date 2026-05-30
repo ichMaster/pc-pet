@@ -124,7 +124,7 @@ a dedicated screen plus a mood influence. Works even without a BLE link to the P
 - Sensors: **SHT30** (temperature + humidity) + **QMP6988** (barometric pressure).
 - Library: **M5Unit-ENV** (use the ENV III / QMP6988 path, not BMP280).
 - HAT on pins **G0 (SDA)** / **G26 (SCL)** of the top 8-pin connector.
-- Initialize on a separate bus: `Wire1.begin(0, 26)` so it does not clash with the
+- Initialize on a separate bus: `Wire.begin(0, 26)` so it does not clash with the
   internal IMU/RTC on the main bus. (`Wire.begin(0,26)` is otherwise mandatory for
   the HAT, since I2C defaults to the Grove port.)
 - **Caveat:** G0 is a strap pin; some I2C sensors on (0,26) can interfere with
@@ -365,14 +365,14 @@ thresholds. #6 is small and independent, rounds out the metric picture.
 
 ### Phase 2 — Environment sensing (stage 5)
 
-ENV III HAT (SHT30 + QMP6988) on `Wire1(0,26)`. The screen, trend, and mood
+ENV III HAT (SHT30 + QMP6988) on `Wire(0, 26)`. The screen, trend, and mood
 modifier are autonomous (work without a BLE link); telemetry, log retention, and
 a separate CSV viewer add the PC-side review path. Full issue spec:
 `specification/phase2-environment-sensing.md` (PCP-005..011).
 
 | Stage | Content | Effort |
 |---|---|---|
-| 5a | PCP-005 ENV III sensor bring-up — SHT30 + QMP6988 on `Wire1(0,26)`, mandatory presence check | medium |
+| 5a | PCP-005 ENV III sensor bring-up — SHT30 + QMP6988 on `Wire(0, 26)`, mandatory presence check | medium |
 | 5b | PCP-006 ENV screen — temp / humidity / pressure, added to the BtnA cycle | medium |
 | 5c | PCP-007 pressure trend log — barometer rising / falling / steady (reusable `pressTrend()`) | low |
 | 5d | PCP-008 ENV mood modifier — stuffy-room / weather-turning (never overrides PC alerts) | medium |

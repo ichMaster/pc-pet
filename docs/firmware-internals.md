@@ -96,7 +96,7 @@ delay(55 ms)  or  delay(150 ms) if screen is off
 Two background data paths run independently of the PC link:
 
 ```
-ENV III sensors (every ~2 s, blocking I2C on Wire1)
+ENV III sensors (every ~2 s, blocking I2C on Wire)
   g_sht30.update()    -> g_envTemp, g_envHum
   g_qmp6988.update()  -> g_envPress (Pa -> hPa)
   every ~60 s: append g_envPress to g_pressHist ring (pressure trend)
@@ -420,7 +420,7 @@ The optional M5 ENV III HAT carries two I2C sensors on a second bus.
 
 | Item | Detail |
 |------|--------|
-| Bus | `Wire1` on GPIO 0 (SDA) / GPIO 26 (SCL), 400 kHz |
+| Bus | `Wire` on GPIO 0 (SDA) / GPIO 26 (SCL), 400 kHz |
 | SHT3X (SHT30) | Temperature + humidity, addr 0x44 -> `g_envTemp`, `g_envHum` |
 | QMP6988 | Barometric pressure, addr 0x76 -> `g_envPress` (Pa -> hPa) |
 | Presence | `setup()` sets `g_envPresent` only if **both** sensors init OK |
