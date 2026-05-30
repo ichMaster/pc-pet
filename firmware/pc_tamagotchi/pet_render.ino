@@ -3,6 +3,24 @@
 // Additional Arduino "tab": concatenated onto the main sketch, so globals/types
 // from pc_tamagotchi.ino and pet_types.h are visible here. Do not add includes.
 
+// ----------- drawing utilities -------------------------------
+// Linear blend between two RGB565 colours (t=0 -> a, t=1 -> b).
+uint16_t lerpColor(uint16_t a, uint16_t b, float t) {
+  int ar = (a >> 11) & 0x1F, ag = (a >> 5) & 0x3F, ab = a & 0x1F;
+  int br = (b >> 11) & 0x1F, bg = (b >> 5) & 0x3F, bb = b & 0x1F;
+  int r = ar + (br - ar) * t;
+  int g = ag + (bg - ag) * t;
+  int bl = ab + (bb - ab) * t;
+  return (r << 11) | (g << 5) | bl;
+}
+
+// Small horizontal progress bar.
+void drawBar(int x, int y, int w, int h, int pct, uint16_t col) {
+  canvas.drawRoundRect(x, y, w, h, 2, canvas.color565(70, 70, 80));
+  int fill = (w - 2) * constrain(pct, 0, 100) / 100;
+  canvas.fillRoundRect(x + 1, y + 1, fill, h - 2, 2, col);
+}
+
 // ----------- character silhouettes ---------------------------
 // Draws the body + character-specific features. Eyes/mouth/effects
 // are drawn afterwards by drawPet and are shared across characters.
