@@ -263,7 +263,9 @@ void viewPet(int cpu, int ram, int temp, int net, int procs,
   canvas.setTextColor(TFT_WHITE);
   canvas.setTextSize(2);
   int tier = (mood == M_PANIC) ? panicTier(g_panicSec) : 1;
-  canvas.drawString(connected ? moodWord(mood, tier) : "waiting", canvas.width() / 2, 150);
+  const char* word = (emod == ENV_STUFFY) ? "stuffy room"
+                   : connected ? moodWord(mood, tier) : "waiting";
+  canvas.drawString(word, canvas.width() / 2, 150);
 
   // top process
   canvas.setTextSize(1);
