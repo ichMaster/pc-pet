@@ -18,5 +18,9 @@ enum View { VIEW_PET, VIEW_STATS, VIEW_GRAPH, VIEW_PROCS, VIEW_ENV, VIEW_COUNT }
 // ENV mood-modifier states (PCP-008).
 enum EnvMod { ENV_NONE, ENV_STUFFY, ENV_WEATHER };
 
+// Which HAT is active this session (PCP-012). SPK2 and ENV III share the top
+// HAT port, so only one is fitted at a time.
+enum HatMode { HAT_NONE, HAT_ENV, HAT_SPK2 };
+
 // One top-process entry (name + percentage).
 struct ProcEntry { char name[14]; int val; };

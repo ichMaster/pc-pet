@@ -33,6 +33,15 @@
 
 #define DEVICE_NAME  "PCpet"
 
+// ---- HAT selection (PCP-012) -------------------------------------
+// SPK2 (MAX98357 I2S amp) and ENV III share the top HAT port, and SPK2 has no
+// I2C address, so it cannot be auto-detected. Pick the fitted HAT here and
+// reflash when you swap HATs:
+//   HAT_SELECT = -1        auto-probe ENV III; no HAT if absent (never SPK2)
+//   HAT_SELECT = HAT_ENV   same as auto (probe ENV III)
+//   HAT_SELECT = HAT_SPK2  force the SPK2 I2S amp (skips the ENV probe)
+#define HAT_SELECT (-1)
+
 
 // ---- shared state (written by BLE task, read by main loop) ---
 portMUX_TYPE g_mux = portMUX_INITIALIZER_UNLOCKED;
@@ -124,6 +133,9 @@ float    g_envTemp    = 0;    // room temperature, Celsius
 float    g_envHum     = 0;    // relative humidity, %
 float    g_envPress   = 0;    // barometric pressure, hPa
 uint32_t g_lastEnvRead = 0;
+
+// ---- HAT mode resolved at boot (PCP-012) ----
+HatMode  g_hat = HAT_NONE;
 
 // ---- pressure trend (PCP-007): slow ring buffer for a barometer ----
 const int      PRESS_HIST = 60;          // samples kept
@@ -283,6 +295,19 @@ void setup() {
   Serial.println("\nPC-Pet booting...");
   M5.Display.setRotation(0);          // portrait 135 x 240
   M5.Display.setBrightness(110);
+
+  // ---- audio routing (PCP-012) ----
+  // For SPK2, point M5.Speaker at the HAT's I2S pins BEFORE begin(); otherwise
+  // the built-in speaker config is left untouched. NOTE: M5Unified's
+  // speaker_config_t field names vary by version -- verify on-device.
+  if ((int)HAT_SELECT == HAT_SPK2) {
+    auto spc = M5.Speaker.config();
+    spc.pin_data_out = 25;   // SPK2 DOUT = G25
+    spc.pin_bck      = 26;   // SPK2 BCLK = G26
+    spc.pin_ws       = 0;    // SPK2 LRC  = G0
+    M5.Speaker.config(spc);
+    g_hat = HAT_SPK2;
+  }
   M5.Speaker.begin();
   M5.Speaker.setVolume(120);
   g_lastActivity = millis();
@@ -308,14 +333,17 @@ void setup() {
   // Separate I2C bus (Wire1) on the HAT pins G0=SDA / G26=SCL so it does not
   // clash with the internal IMU/RTC on the main Wire bus. Presence-checked:
   // G0 is a strap pin, so a missing/again HAT must not hang boot.
-  {
-    // ENV III HAT is on the main Wire bus (G0=SDA / G26=SCL), NOT Wire1.
+  // ENV III HAT on the main Wire bus (G0=SDA / G26=SCL). Skip the probe in SPK2
+  // mode -- there G0/G26 are the amp's I2S pins, not I2C.
+  if (g_hat != HAT_SPK2) {
     // begin() returns true even when absent, so confirm with a real read.
     g_sht30.begin(&Wire, SHT3X_I2C_ADDR, 0, 26, 400000U);
     g_qmp6988.begin(&Wire, QMP6988_SLAVE_ADDRESS_L, 0, 26, 400000U);
     g_envPresent = g_sht30.update() && g_qmp6988.update();
-    Serial.printf("ENV III: %s\n", g_envPresent ? "present" : "absent");
+    if (g_envPresent) g_hat = HAT_ENV;
   }
+  Serial.printf("HAT: %s\n", g_hat == HAT_SPK2 ? "SPK2"
+                           : g_hat == HAT_ENV  ? "ENV III" : "none");
 
   // ---- BLE peripheral ----
   BLEDevice::init(DEVICE_NAME);
