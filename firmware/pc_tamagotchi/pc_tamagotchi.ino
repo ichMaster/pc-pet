@@ -76,7 +76,7 @@ const char* moodWord(Mood m, int tier = 1) {
 }
 
 // ---- views ---------------------------------------------------
-enum View { VIEW_PET, VIEW_STATS, VIEW_GRAPH, VIEW_PROCS, VIEW_COUNT };
+enum View { VIEW_PET, VIEW_STATS, VIEW_GRAPH, VIEW_PROCS, VIEW_ENV, VIEW_COUNT };
 int  g_view = VIEW_PET;
 bool g_mute = false;
 
@@ -867,6 +867,8 @@ void loop() {
   if (M5.BtnA.wasClicked()) {
     g_lastActivity = millis(); g_forceOff = false;
     g_view = (g_view + 1) % VIEW_COUNT;
+    // ENV screen (PCP-006) is only in the cycle when the HAT is present
+    if (g_view == VIEW_ENV && !g_envPresent) g_view = (g_view + 1) % VIEW_COUNT;
     playMelody(MEL_CLICK);
   }
   if (M5.BtnB.wasSingleClicked()) {
