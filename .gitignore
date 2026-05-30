@@ -1,11 +1,7 @@
-# ENV telemetry log written at runtime (PCP-009/010)
-agent/env_log.csv
-agent/env_log.csv.*
-
 # Python
 __pycache__/
 *.pyc
 
-# PC-Pet: ENV telemetry log written at runtime (PCP-009/010)
+# ENV telemetry log written at runtime (PCP-009/010)
 agent/env_log.csv
 agent/env_log.csv.*
