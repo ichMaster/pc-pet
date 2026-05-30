@@ -294,11 +294,12 @@ void viewPet(int cpu, int ram, int temp, int net, int procs,
   canvas.setTextDatum(middle_center);
   canvas.drawString(foot, canvas.width() / 2, 224);
 
-  // ENV modifier badge (PCP-008): subtle, top-left under the bar
-  if (emod != ENV_NONE) {
+  // ENV modifier badge (PCP-008): only WEATHER needs it (STUFFY already shows
+  // "stuffy room" as the mood word, so a corner badge would be redundant).
+  if (emod == ENV_WEATHER) {
     canvas.setTextDatum(top_left);
     canvas.setTextColor(canvas.color565(200, 180, 120));
-    canvas.drawString(emod == ENV_STUFFY ? "stuffy" : "weather", 4, 20);
+    canvas.drawString("weather", 4, 20);
   }
 }
 
