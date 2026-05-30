@@ -1,3 +1,11 @@
+Version 0.2.1 (2026-05-30)
+---------------------------
+- Fix: ENV III HAT now works -- sensors are on the Wire bus (G0/G26), not Wire1 (spec was wrong)
+- Fix: restore broken firmware build -- split sketch into Arduino tabs and restore the missing viewEnv()
+- Fix: STUFFY shows a single "stuffy room" label instead of conflicting "so full" + badge
+- Add: ENV mood modifiers animate on the pet (rain for weather, heat wisps for stuffy)
+- Docs: sync to current code; add Phase 3 (SPK2 audio) issue specs and Phase 5 TUI config-editing roadmap
+
 Version 0.2.0 (2026-05-30)
 ---------------------------
 - PCP-005 ENV III sensor bring-up: SHT30 + QMP6988 on Wire1(0,26) with boot presence check
