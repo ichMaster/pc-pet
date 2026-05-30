@@ -1,3 +1,13 @@
+Version 0.2.0 (2026-05-30)
+---------------------------
+- PCP-005 ENV III sensor bring-up: SHT30 + QMP6988 on Wire1(0,26) with boot presence check
+- PCP-006 ENV screen: temp / humidity / pressure view in the BtnA cycle (skipped without HAT)
+- PCP-007 Pressure trend log: barometer rising/falling/steady via pressTrend()
+- PCP-008 ENV mood modifier: stuffy-room / weather-turning influence (PC alerts keep priority)
+- PCP-009 ENV telemetry to PC: device ENV; TX notify; agent logs to env_log.csv + console echo
+- PCP-010 ENV log retention: size-based rotation of env_log.csv (agent-only)
+- PCP-011 ENV CSV viewer TUI: standalone Textual + plotext app under tools/env_viewer/
+
 Version 0.1.0 (2026-05-29)
 ---------------------------
 - PCP-001 One-second tick: stable 1 Hz millis-based counter for panic duration tracking
