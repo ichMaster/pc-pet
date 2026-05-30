@@ -136,12 +136,16 @@ a dedicated screen plus a mood influence. Works even without a BLE link to the P
 - **Mood influence:** hot/stuffy room -> a "stuffy" modifier; sharp pressure drop
   -> "weather turning".
 - **Pressure log** for a simple barometer (trend up/down).
-- **Option:** send ENV data back to the agent (log the workplace climate).
+- **ENV -> PC telemetry (now included, Phase 2 / PCP-009):** the device sends ENV
+  back to the agent over TX notify; the agent logs the workplace climate to a
+  size-rotated `env_log.csv`, reviewable in a standalone TUI viewer.
 
 ### Open questions
-- Whether to send ENV back to the PC.
+- ~~Whether to send ENV back to the PC.~~ **Resolved: included** (Phase 2, PCP-009).
 
-**Effort:** low-medium. Dependencies: none (hardware only). Autonomous from the PC.
+**Effort:** low-medium (Phase 2 splits it into PCP-005..011). Dependencies: none
+(hardware only). Autonomous from the PC for the screen / trend / mood; telemetry
+and the viewer add the PC-side path.
 
 ---
 
@@ -344,12 +348,37 @@ thresholds. #6 is small and independent, rounds out the metric picture.
 
 ### Phase 2 — Environment sensing (stage 5)
 
+ENV III HAT (SHT30 + QMP6988) on `Wire1(0,26)`. The screen, trend, and mood
+modifier are autonomous (work without a BLE link); telemetry, log retention, and
+a separate CSV viewer add the PC-side review path. Full issue spec:
+`specification/phase2-environment-sensing.md` (PCP-005..011).
+
 | Stage | Content | Effort |
 |---|---|---|
-| 5 | #7 ENV III — SHT30 + QMP6988 on Wire1(0,26) | low-medium |
+| 5a | PCP-005 ENV III sensor bring-up — SHT30 + QMP6988 on `Wire1(0,26)`, mandatory presence check | medium |
+| 5b | PCP-006 ENV screen — temp / humidity / pressure, added to the BtnA cycle | medium |
+| 5c | PCP-007 pressure trend log — barometer rising / falling / steady (reusable `pressTrend()`) | low |
+| 5d | PCP-008 ENV mood modifier — stuffy-room / weather-turning (never overrides PC alerts) | medium |
+| 5e | PCP-009 ENV telemetry to PC — device emits `ENV;` over TX notify; agent logs to `env_log.csv` + console echo | medium |
+| 5f | PCP-010 ENV log retention — size-based rotation of `env_log.csv` (agent-only) | low |
+| 5g | PCP-011 ENV CSV viewer TUI — standalone Textual + plotext app under `tools/env_viewer/` | medium |
 
-Autonomous from the PC link. Adds an ENV screen (temp / humidity / pressure)
-and an optional mood modifier. Demo-friendly; works even without BLE.
+**Scope decisions (resolved from #7's open questions):**
+- **ENV-to-PC telemetry: included** (5e) — an `ENV;temp=..;hum=..;press=..` notify
+  line; the agent reviews via an append-only, timestamped `env_log.csv` plus a
+  one-line console echo. This is the **first use of the TX notify reverse channel**
+  and sets the `PREFIX;...` pattern that the later `MOOD;` telemetry (Phase 4)
+  follows.
+- **ENV mood modifier: included** (5d) — layered on the PC-driven mood; PC alert
+  states (PANIC / HOT / LOWPWR) always take priority.
+
+**Autonomy & parallelism:** 5a-5d need no PC link (demo-friendly without BLE).
+5e-5g add the PC-side review path. PCP-009 (5e) only needs 5a, so it runs parallel
+to the screen/trend/mood chain (5b -> 5c -> 5d); PCP-010 (5f) and PCP-011 (5g) are
+independent consumers of `env_log.csv`.
+
+**TUI seed:** 5g is the standalone CSV viewer that Phase 4 grows into the live
+companion app (feature #9).
 
 ### Phase 3 — SPK2 audio HAT (stage 6)
 
@@ -465,7 +494,9 @@ plumbing. Scheduled last per its risk and low priority.
 
 1. **#2:** defaults for T1/T2 (10 s / 30 s?); count only `M_PANIC` or also `M_HOT`.
 2. **#6:** I/O units — MB/s or KB/s.
-3. **#7:** whether to send ENV data back to the PC. (Version resolved: ENV III.)
+3. **#7:** ~~whether to send ENV data back to the PC~~ — **resolved: included**
+   (Phase 2, PCP-009 telemetry + PCP-010 rotation + PCP-011 viewer). Version
+   resolved: ENV III.
 4. **8a:** mute global (as now) or per-type.
 5. **5a:** user script path(s) — one slot or several.
 6. **5b:** exact kill confirmation flow.
