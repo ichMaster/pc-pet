@@ -21,6 +21,7 @@ implementation, after splitting #5 and #8 into smaller tasks.
 | 8b | Threshold config channel | agent -> device `CFG;` line (higher complexity) |
 | 5a | Reverse channel — safe commands | lock / play-pause / volume / run-script |
 | 5b | Reverse channel — Kill | separate, low priority, **after #8** |
+| 9 | TUI companion app | PC-side terminal dashboard — live mood + ENV, logs browser, command log, mood control |
 
 **Not selected:** 1.2 (NVS), 3 (achievements), 4 (touch/petting). Consequences in
 "Dependency review".
@@ -233,6 +234,56 @@ plumbing), Procs screen (exists). Scheduled last.
 
 ---
 
+## 9. TUI companion app (PC-side)
+
+**Goal:** a terminal dashboard on the PC that visualizes everything the stick
+knows and lets the user interact back. It grows in three steps across phases 2-4.
+
+### Evolution
+
+- **Phase 2 (built):** a standalone CSV viewer (`tools/env_viewer/`, Textual +
+  plotext) that reads `env_log.csv` and charts temperature / humidity / pressure.
+  Read-only consumer of the log; no live link to the stick.
+- **Phase 3 — live companion + logs browser:** extend the viewer into a live app:
+  - Subscribe to the stick's TX (notify) channel and show, in real time:
+    - the **character's current mood** on the stick (PANIC tier, HOT, SLEEP, ...),
+    - **live ENV readings** from the HAT (the `ENV;...` telemetry from #7), shown
+      as live values + charts rather than only from the CSV.
+  - Fold the Phase-2 CSV viewer in as a **logs browser** tab: browse/scroll the
+    historical `env_log.csv` (and rotated files), pick time windows, switch
+    metrics. Live view and historical browser live in one app.
+- **Phase 4 — commands + control:**
+  - **Command log:** every reverse-channel command (#5a) the stick issues is
+    logged to its own file and shown in a **separate view from ENV telemetry**
+    (command history and climate data are not mixed).
+  - **Mood control:** the user can push a **mood signal from the TUI to the
+    stick** (PC -> device), so the character reflects a user-chosen mood.
+
+### New data paths introduced
+
+- **Stick -> PC (notify):** a `MOOD;...` line carrying the current pet mood
+  (and panic tier), alongside the existing `ENV;...` telemetry. Lets the TUI
+  mirror the stick's face live. Added in Phase 3.
+- **PC -> stick (RX write):** a `MOOD;...` line (same RX characteristic as
+  metrics and `CFG;`, distinguished by the first token) that sets/overrides the
+  character's mood from the TUI. Added in Phase 4; reuses the multi-prefix parse
+  path established by #8b.
+
+### Open questions
+
+- **Mood signal semantics:** does a user-sent mood *override* the PC-metric mood
+  for a fixed duration, or only when metrics are calm (like the ENV modifier)?
+- **Command log format:** reuse the rotated-CSV scheme (timestamp, command,
+  result) or a separate append-only log.
+- Whether live mood mirroring needs the stick to push on every change (event) or
+  on a fixed cadence (poll).
+
+**Effort:** Phase 3 extension medium; Phase 4 additions medium. Dependencies:
+#7 ENV telemetry (Phase 2), TX notify (exists), #8b multi-prefix parse path
+(Phase 3) for the PC -> stick mood line, #5a for the command log.
+
+---
+
 ## Implementation phases
 
 ### Phase 1 — Core mechanics (stages 1-4)
@@ -258,13 +309,15 @@ thresholds. #6 is small and independent, rounds out the metric picture.
 Autonomous from the PC link. Adds an ENV screen (temp / humidity / pressure)
 and an optional mood modifier. Demo-friendly; works even without BLE.
 
-### Phase 3 — PlatformIO migration + configurable thresholds + security review (stage 6)
+### Phase 3 — PlatformIO migration + configurable thresholds + security review + live TUI (stage 6)
 
 | Stage | Content | Effort |
 |---|---|---|
 | 6-pre | Migrate firmware build from Arduino IDE to PlatformIO | low-medium |
 | 6a | 8b threshold config channel — `CFG;`-prefixed line over RX | low-medium |
 | 6b | Security review of BLE input parsing | low |
+| 6c | Stick mood telemetry — device emits `MOOD;` over TX notify | low |
+| 6d | TUI live companion — live mood + live ENV from the stick; fold the CSV viewer in as a logs browser | medium |
 
 **Build migration (6-pre):** starting from this phase the firmware builds with
 PlatformIO instead of the Arduino IDE. Steps:
@@ -291,14 +344,36 @@ ensuring the metric parse path cannot be tricked by a `CFG`-shaped metric packet
 Also audit the existing `parsePacket()` path (atoi overflow, strncpy bounds,
 strtok edge cases) while the parsing code is open.
 
-### Phase 4 — Remote control (stage 7)
+**Live TUI (6c, 6d):** the device starts emitting its current mood as a `MOOD;`
+notify line (6c, a small firmware addition next to the `ENV;` telemetry). The
+Phase-2 CSV viewer is then extended (6d) into a live companion app: it subscribes
+to the stick's TX channel and shows the character's live mood and live ENV
+readings, while the existing CSV charts move into a "logs browser" tab for
+historical data (with rotated-file support and time windows). One app, two modes:
+live and historical. See feature #9 for the full picture.
+
+### Phase 4 — Remote control + TUI command log & mood control (stage 7)
 
 | Stage | Content | Effort |
 |---|---|---|
 | 7 | 5a reverse channel — safe commands over TX notify | medium |
+| 7b | Command log + visualization — log every reverse-channel command; separate TUI view from telemetry | low-medium |
+| 7c | Mood control — user sends a `MOOD;` signal from the TUI to the stick (PC -> device) | medium |
 
 Lock screen, play/pause, volume, run-script. A new Remote screen in
 the BtnA cycle; long-press to execute. Whitelist only.
+
+**Command log (7b):** as commands fire (7), the agent records each one
+(timestamp, command, result) to its own log and the TUI shows them in a
+dedicated view, kept **separate from the ENV telemetry** so command history and
+climate data never mix. Reuses the rotated-log approach from the ENV logging.
+
+**Mood control (7c):** the TUI gains a control to push a mood signal to the stick
+over the RX characteristic (`MOOD;` line, distinguished from metrics and `CFG;`
+by its first token — reusing the multi-prefix parse path added in Phase 3/8b).
+The character on the stick then reflects the user-chosen mood. See feature #9 and
+its open question on whether a sent mood overrides the PC-metric mood or only
+applies when metrics are calm.
 
 ### Phase 5 — Kill (stage 8)
 
@@ -319,3 +394,6 @@ plumbing. Scheduled last per its risk and low priority.
 4. **8a:** mute global (as now) or per-type.
 5. **5a:** user script path(s) — one slot or several.
 6. **5b:** exact kill confirmation flow.
+7. **#9 (TUI):** does a user-sent mood override the PC-metric mood for a fixed
+   duration, or only apply when metrics are calm? Event-driven vs cadence mood
+   push from the stick. Command-log format (rotated CSV vs separate log).
