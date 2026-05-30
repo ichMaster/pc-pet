@@ -431,6 +431,21 @@ int pressTrend() {
   return 0;
 }
 
+// ENV mood modifier (PCP-008). Thresholds hardcoded for now (8b may expose them).
+const float ENV_STUFFY_TEMP = 27.0f;   // room temp C
+const float ENV_STUFFY_HUM  = 60.0f;   // humidity %
+
+enum EnvMod { ENV_NONE, ENV_STUFFY, ENV_WEATHER };
+
+// STUFFY when the room is hot AND humid; WEATHER when pressure is falling
+// sharply. Only meaningful when the HAT is present.
+EnvMod envModifier() {
+  if (!g_envPresent) return ENV_NONE;
+  if (g_envTemp >= ENV_STUFFY_TEMP && g_envHum >= ENV_STUFFY_HUM) return ENV_STUFFY;
+  if (pressTrend() < 0) return ENV_WEATHER;
+  return ENV_NONE;
+}
+
 // draw a small horizontal bar
 void drawBar(int x, int y, int w, int h, int pct, uint16_t col) {
   canvas.drawRoundRect(x, y, w, h, 2, canvas.color565(70, 70, 80));
