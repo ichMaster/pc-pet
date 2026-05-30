@@ -24,9 +24,36 @@ info screens.
 - Use Write Request (`response=True`) from the agent — some ESP32 stacks fire
   `onWrite` reliably only for Write Requests, not Write Commands.
 
-## Firmware conventions (`firmware/pc_tamagotchi/pc_tamagotchi.ino`)
+## Firmware conventions (`firmware/pc_tamagotchi/`)
 
-- The sketch folder name must match the `.ino` name for the Arduino IDE.
+The sketch is split across multiple Arduino "tabs" in the one sketch folder.
+The Arduino IDE compiles them as a single translation unit: it concatenates the
+main `.ino` first, then the other `.ino` files alphabetically, then
+auto-generates function prototypes for everything. Files:
+
+- `pc_tamagotchi.ino` — main tab: includes, all globals, BLE callbacks,
+  `parsePacket`, `setup()`, the melody arrays, and `loop()`. Must keep the
+  `.ino` name matching the folder name.
+- `pet_types.h` — shared types (`MelNote`, `Mood`, `View`, `EnvMod`,
+  `ProcEntry`). Included from the main tab **before** anything else so the
+  types are visible to the IDE's auto-generated prototypes (a struct used in a
+  prototype must be declared first, or the build fails with "does not name a
+  type").
+- `pet_helpers.ino` — pure logic + small draw helpers (`playMelody`,
+  `currentMood`, `bodyColor`, `lerpColor`, `panicTier`, `pressTrend`,
+  `envModifier`, `drawBar`).
+- `pet_render.ino` — character art (`drawCharBody`), the pet renderer
+  (`drawPet`), and the view screens (`viewPet/Stats/Graph/Procs/Env`).
+
+Rules for the split:
+- Globals stay in the main tab (above `setup()`); the helper/render tabs read
+  them but never re-declare them. Do NOT add `#include` lines or duplicate
+  globals/constants in the helper/render tabs.
+- Functions called across tabs must have external linkage (no `static`). Only
+  main-tab-private helpers (`stashBytes`, `parseProcList`, `parsePacket`) are
+  `static`.
+- New shared enums/structs go in `pet_types.h`, not inline in a tab.
+
 - Globals shared between `setup()`/`loop()` must be declared above `setup()`
   (C++ visibility) — a previous bug came from declaring power globals after it.
 - Shared state between BLE callback and loop is guarded with `g_mux`
