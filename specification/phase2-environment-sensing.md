@@ -23,6 +23,7 @@ Scope decisions (from ROADMAP open questions):
 | 4 | PCP-008 | ENV mood modifier | M | 4 -- Mood | PCP-005, PCP-007 |
 | 5 | PCP-009 | ENV telemetry to PC | M | 5 -- Telemetry | PCP-005 |
 | 6 | PCP-010 | ENV log retention (rotation) | S | 5 -- Telemetry | PCP-009 |
+| 7 | PCP-011 | ENV CSV viewer TUI (separate app) | M | 6 -- Tooling | PCP-009 |
 
 **Size legend:** S = 1-2 days, M = 3-5 days, L = 5-8 days
 
@@ -38,9 +39,10 @@ Scope decisions (from ROADMAP open questions):
     PCP-006      (PCP-007      PCP-009            (PCP-008 also
     (ENV screen)  needs 006)   (telemetry)        needs 007)
         |            |            |
-        +-----+------+        PCP-010
-              |              (log retention)
-          PCP-007 (pressure trend)
+        +-----+------+        PCP-009 (telemetry, writes env_log.csv)
+              |              /            \
+          PCP-007           PCP-010        PCP-011
+          (trend)           (retention)    (viewer TUI, separate app)
               |
           PCP-008 (mood modifier)
 ```
@@ -50,7 +52,9 @@ Scope decisions (from ROADMAP open questions):
 - PCP-005 must land first -- it provides the sensor reads everything else uses.
 - PCP-009 (telemetry) is independent of the screen/trend/mood chain -- it only
   needs PCP-005, so it can run in parallel with PCP-006/007/008.
-- PCP-010 (retention) is a small agent-only follow-up to PCP-009.
+- PCP-010 (retention) and PCP-011 (viewer) both consume the `env_log.csv` from
+  PCP-009 and are independent of each other -- they can run in parallel once
+  PCP-009 lands. PCP-011 is a fully separate application (own dependencies).
 - PCP-006 -> PCP-007 -> PCP-008 form a sequential chain (screen, then trend on
   the screen, then mood modifier that reuses the trend).
 
@@ -417,3 +421,90 @@ Each fresh active log starts with the CSV header.
 - [ ] No new dependencies (stdlib only)
 - [ ] README documents the retention flags
 - [ ] Files changed: `agent/pc_pet_agent.py`, `README.md`
+
+---
+
+## Stage 6 -- Tooling
+
+### PCP-011 -- ENV CSV viewer TUI (separate application)
+
+**Description:**
+A standalone terminal application that reads `env_log.csv` (produced by PCP-009,
+rotated by PCP-010) and visualizes room temperature, humidity, and pressure over
+time as an interactive TUI. It is a **separate app** with its own dependencies
+and its own entry point -- it does not import from or modify the agent or the
+firmware. It only consumes the CSV on disk, so it can run on the same machine as
+the agent or anywhere the CSV is copied.
+
+**Stack:** Textual (interactive TUI framework) + plotext via `textual-plotext`
+(terminal charts). Kept isolated in its own `requirements.txt` so the agent's
+runtime stays lean.
+
+**What needs to be done:**
+- Create a new self-contained app directory `tools/env_viewer/`:
+  ```
+  tools/env_viewer/
+    env_viewer.py        # entry point (Textual App)
+    requirements.txt     # textual, textual-plotext
+    README.md            # usage, screenshots/ascii, flags
+  ```
+- **Input:** read the PCP-009 CSV schema
+  (`timestamp,temp_c,humidity_pct,pressure_hpa`).
+  - Default path `env_log.csv`; override with `--log <path>`.
+  - `--include-rotated` -- also read `<path>.1 .. <path>.N` from PCP-010 and
+    stitch them in chronological order for full history (off by default).
+  - Parse timestamps (ISO-8601); skip malformed rows without crashing.
+- **TUI layout (Textual):**
+  - A chart area showing one metric at a time (Temperature / Humidity /
+    Pressure) rendered with a `textual-plotext` PlotextPlot widget (time on X,
+    value on Y).
+  - Tabs or a switch to change the active metric; the metric name and unit are
+    shown.
+  - A status/footer bar: total row count, time span covered, and the latest
+    value of each metric.
+  - Keyboard bindings: `q` quit, `tab` / left-right to switch metric, `r` manual
+    refresh, and (optional) number keys to pick a time window.
+- **Live refresh:** use Textual's `set_interval` to re-read the CSV on a timer
+  (default ~5 s, `--refresh`), so rows appended by a running agent appear without
+  restarting. Read incrementally / tail rather than reparsing the whole file each
+  tick where practical.
+- **Time window:** `--window` (e.g. `1h`, `24h`, `all`, default `24h`) to bound
+  how much history is charted; keys to cycle windows at runtime. For large files,
+  only load/plot the rows in the window (efficient on multi-MB logs).
+- **Robustness:**
+  - Missing or empty CSV -> show a friendly "waiting for data / no log found"
+    state, not a stack trace.
+  - File being appended/rotated mid-read -> tolerate transient read errors and
+    retry on the next tick.
+  - Degrade cleanly in small terminals.
+- **Docs:** `tools/env_viewer/README.md` with install
+  (`pip install -r requirements.txt`), run (`python env_viewer.py --log ...`),
+  flags, and key bindings. Add a short pointer from the main README.
+- Do NOT modify `agent/pc_pet_agent.py` or the firmware -- the viewer is
+  read-only on the CSV.
+- Do NOT add the viewer's deps to the agent `requirements.txt` -- keep them
+  isolated in `tools/env_viewer/requirements.txt`.
+- Do NOT have the viewer write to or rotate the CSV (read-only consumer).
+
+**Dependencies:** PCP-009 (CSV format/source). Soft: PCP-010 (rotated files --
+`--include-rotated` only matters once rotation exists).
+
+**Expected result:**
+Running `python tools/env_viewer/env_viewer.py` opens an interactive terminal
+dashboard charting ENV history from `env_log.csv`, switchable between
+temperature / humidity / pressure, auto-refreshing as the agent appends new
+readings.
+
+**Acceptance criteria:**
+- [ ] Self-contained app under `tools/env_viewer/` with its own `requirements.txt`
+- [ ] Reads the PCP-009 CSV schema; `--log` overrides the path
+- [ ] `--include-rotated` stitches in `*.N` rotated files in chronological order
+- [ ] Interactive Textual TUI charts temperature, humidity, and pressure (plotext)
+- [ ] Metric switching via keyboard; status bar shows row count, span, latest values
+- [ ] Live auto-refresh picks up newly appended rows (`--refresh` interval)
+- [ ] `--window` bounds the charted history and stays efficient on multi-MB files
+- [ ] Missing / empty / malformed CSV handled gracefully (no crash)
+- [ ] Viewer is read-only -- never writes or rotates the CSV
+- [ ] Viewer deps are isolated (not added to the agent requirements)
+- [ ] `tools/env_viewer/README.md` documents install, usage, flags, key bindings
+- [ ] Files changed: new `tools/env_viewer/*`, `README.md` (pointer)
