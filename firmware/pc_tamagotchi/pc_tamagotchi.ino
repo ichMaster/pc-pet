@@ -428,6 +428,9 @@ void loop() {
     Serial.printf("dbg: writes=%lu getLen=%u paramLen=%u conn=%d\n",
                   (unsigned long)g_writeCount, (unsigned)g_dbgGetLen,
                   (unsigned)g_dbgParamLen, (int)g_connected);
+    Serial.printf("env: present=%d temp=%.1f hum=%.1f press=%.1f lastRead=%lu\n",
+                  (int)g_envPresent, g_envTemp, g_envHum, g_envPress,
+                  (unsigned long)g_lastEnvRead);
   }
 
   // ---- buttons ----
