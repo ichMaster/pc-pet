@@ -21,7 +21,7 @@ implementation, after splitting #5 and #8 into smaller tasks.
 | 8b | Threshold config channel | agent -> device `CFG;` line (higher complexity) |
 | 5a | Reverse channel — safe commands | lock / play-pause / volume / run-script |
 | 5b | Reverse channel — Kill | separate, low priority, **after #8** |
-| 9 | TUI companion app | PC-side terminal dashboard — live mood + ENV, logs browser, command log, mood control |
+| 9 | TUI companion app | PC-side terminal dashboard — live mood + ENV, logs browser, command log, mood control, live config editing |
 | SPK | SPK2 audio HAT | richer audio — routing, panic siren, mood ambient, WAV voice — **mutually exclusive with ENV III** |
 
 **Not selected:** 1.2 (NVS), 3 (achievements), 4 (touch/petting). Consequences in
@@ -268,6 +268,13 @@ knows and lets the user interact back. It grows in three steps across phases 2,
     (command history and climate data are not mixed).
   - **Mood control:** the user can push a **mood signal from the TUI to the
     stick** (PC -> device), so the character reflects a user-chosen mood.
+  - **Config editing (real-time):** a config panel edits the #8b threshold
+    values (`hot`, `panic_cpu/ram/gpu`, `lowpwr`, `p1`, `p2`) and pushes them to
+    the stick **live** over the existing `CFG;` channel. The stick applies them
+    on the next loop (no reboot, no NVS), so the effect is visible immediately in
+    the live mood view — e.g. lowering `panic_cpu` makes the pet panic at a lower
+    load right away. Edits are written back to the agent's config so they survive
+    a restart and are re-sent on the next connect.
 
 ### New data paths introduced
 
@@ -278,6 +285,11 @@ knows and lets the user interact back. It grows in three steps across phases 2,
   metrics and `CFG;`, distinguished by the first token) that sets/overrides the
   character's mood from the TUI. Added in Phase 5; reuses the multi-prefix parse
   path established by #8b.
+- **PC -> stick (RX write, config):** the TUI also drives the existing `CFG;`
+  line directly (Phase 5 config editing). #8b already added the channel and the
+  device-side parse; here the TUI becomes a live *source* of `CFG;` updates,
+  pushing edited thresholds on change rather than only on connect. No new wire
+  format — same `CFG;` the agent sends.
 
 ### Open questions
 
@@ -287,10 +299,15 @@ knows and lets the user interact back. It grows in three steps across phases 2,
   result) or a separate append-only log.
 - Whether live mood mirroring needs the stick to push on every change (event) or
   on a fixed cadence (poll).
+- **Config editing:** push every keystroke/spin live, or debounce and push on
+  commit? Persist edits to the agent config file or keep them session-only?
+  Whether to surface the device's effective values back (a future device ->
+  PC `CFG?` echo) so the TUI can confirm what the stick actually applied.
 
 **Effort:** Phase 4 extension medium; Phase 5 additions medium. Dependencies:
 #7 ENV telemetry (Phase 2), TX notify (exists), #8b multi-prefix parse path
-(Phase 4) for the PC -> stick mood line, #5a for the command log.
+(Phase 4) for the PC -> stick mood line, #5a for the command log, #8b config
+channel (Phase 4) for live config editing.
 
 ---
 
@@ -456,13 +473,14 @@ readings, while the existing CSV charts move into a "logs browser" tab for
 historical data (with rotated-file support and time windows). One app, two modes:
 live and historical. See feature #9 for the full picture.
 
-### Phase 5 — Remote control + TUI command log & mood control (stage 8)
+### Phase 5 — Remote control + TUI command log, mood & config control (stage 8)
 
 | Stage | Content | Effort |
 |---|---|---|
 | 8 | 5a reverse channel — safe commands over TX notify | medium |
 | 8b | Command log + visualization — log every reverse-channel command; separate TUI view from telemetry | low-medium |
 | 8c | Mood control — user sends a `MOOD;` signal from the TUI to the stick (PC -> device) | medium |
+| 8d | Config editing (real-time) — TUI panel edits #8b thresholds and pushes `CFG;` live; stick applies on next loop | low-medium |
 
 Lock screen, play/pause, volume, run-script. A new Remote screen in
 the BtnA cycle; long-press to execute. Whitelist only.
@@ -478,6 +496,18 @@ by its first token — reusing the multi-prefix parse path added in Phase 4 by t
 #8b config channel). The character on the stick then reflects the user-chosen
 mood. See feature #9 and its open question on whether a sent mood overrides the
 PC-metric mood or only applies when metrics are calm.
+
+**Config editing (8d):** the TUI adds a config panel for the #8b threshold values
+(`hot`, `panic_cpu/ram/gpu`, `lowpwr`, `p1`, `p2`). Editing a value and committing
+pushes a fresh `CFG;` line to the stick over the existing RX channel; the device
+applies it on the next `loop()` (no reboot, no NVS), so the change is visible
+immediately in the live mood view (8c / 7d) — e.g. dropping `panic_cpu` makes the
+pet panic sooner straight away. This is the real-time half of #8b: Phase 4 sends
+config on connect from a static file; Phase 5 makes it an interactive, live
+source. Edited values are written back to the agent's config so they persist
+across restarts and are re-sent on the next connect. Depends on the #8b channel
+(Phase 4) and the live TUI (7d). See feature #9 for the config-editing open
+questions (push-per-keystroke vs on-commit; persist vs session-only).
 
 ### Phase 6 — Kill (stage 9)
 
@@ -503,6 +533,9 @@ plumbing. Scheduled last per its risk and low priority.
 7. **#9 (TUI):** does a user-sent mood override the PC-metric mood for a fixed
    duration, or only apply when metrics are calm? Event-driven vs cadence mood
    push from the stick. Command-log format (rotated CSV vs separate log).
+   Config editing: push per-keystroke vs on-commit; persist edits to the agent
+   config or keep session-only; whether the device echoes its effective `CFG`
+   values back so the TUI can confirm what was applied.
 8. **SPK2 audio:** synthesized tones vs. WAV samples (SPK-2/4); flash budget and
    asset format for samples; whether mute silences critical alerts (SPK-9);
    ENV III vs. SPK2 HAT auto-detection method. Full list in
