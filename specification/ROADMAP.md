@@ -22,6 +22,7 @@ implementation, after splitting #5 and #8 into smaller tasks.
 | 5a | Reverse channel — safe commands | lock / play-pause / volume / run-script |
 | 5b | Reverse channel — Kill | separate, low priority, **after #8** |
 | 9 | TUI companion app | PC-side terminal dashboard — live mood + ENV, logs browser, command log, mood control |
+| SPK | SPK2 audio HAT | richer audio — routing, panic siren, mood ambient, WAV voice — **mutually exclusive with ENV III** |
 
 **Not selected:** 1.2 (NVS), 3 (achievements), 4 (touch/petting). Consequences in
 "Dependency review".
@@ -47,6 +48,10 @@ implementation, after splitting #5 and #8 into smaller tasks.
    the only irreversible action, so it is isolated as its own low-priority task,
    scheduled after #8.
 6. **#6, #7** are fully independent blocks. #7 is also autonomous from the PC.
+7. **SPK2 audio HAT** (new Phase 3) is **mutually exclusive** with #7 ENV III —
+   same single HAT port, colliding pins (G0/G26). Only one HAT is fitted per
+   session; firmware auto-detects at boot. SPK reuses the 8a melody system and
+   the #2 panic tiers; SPK-9 (volume) needs 8b. See `spk2-audio-features.md`.
 
 ---
 
@@ -237,14 +242,15 @@ plumbing), Procs screen (exists). Scheduled last.
 ## 9. TUI companion app (PC-side)
 
 **Goal:** a terminal dashboard on the PC that visualizes everything the stick
-knows and lets the user interact back. It grows in three steps across phases 2-4.
+knows and lets the user interact back. It grows in three steps across phases 2,
+4 and 5.
 
 ### Evolution
 
 - **Phase 2 (built):** a standalone CSV viewer (`tools/env_viewer/`, Textual +
   plotext) that reads `env_log.csv` and charts temperature / humidity / pressure.
   Read-only consumer of the log; no live link to the stick.
-- **Phase 3 — live companion + logs browser:** extend the viewer into a live app:
+- **Phase 4 — live companion + logs browser:** extend the viewer into a live app:
   - Subscribe to the stick's TX (notify) channel and show, in real time:
     - the **character's current mood** on the stick (PANIC tier, HOT, SLEEP, ...),
     - **live ENV readings** from the HAT (the `ENV;...` telemetry from #7), shown
@@ -252,7 +258,7 @@ knows and lets the user interact back. It grows in three steps across phases 2-4
   - Fold the Phase-2 CSV viewer in as a **logs browser** tab: browse/scroll the
     historical `env_log.csv` (and rotated files), pick time windows, switch
     metrics. Live view and historical browser live in one app.
-- **Phase 4 — commands + control:**
+- **Phase 5 — commands + control:**
   - **Command log:** every reverse-channel command (#5a) the stick issues is
     logged to its own file and shown in a **separate view from ENV telemetry**
     (command history and climate data are not mixed).
@@ -263,10 +269,10 @@ knows and lets the user interact back. It grows in three steps across phases 2-4
 
 - **Stick -> PC (notify):** a `MOOD;...` line carrying the current pet mood
   (and panic tier), alongside the existing `ENV;...` telemetry. Lets the TUI
-  mirror the stick's face live. Added in Phase 3.
+  mirror the stick's face live. Added in Phase 4.
 - **PC -> stick (RX write):** a `MOOD;...` line (same RX characteristic as
   metrics and `CFG;`, distinguished by the first token) that sets/overrides the
-  character's mood from the TUI. Added in Phase 4; reuses the multi-prefix parse
+  character's mood from the TUI. Added in Phase 5; reuses the multi-prefix parse
   path established by #8b.
 
 ### Open questions
@@ -278,9 +284,45 @@ knows and lets the user interact back. It grows in three steps across phases 2-4
 - Whether live mood mirroring needs the stick to push on every change (event) or
   on a fixed cadence (poll).
 
-**Effort:** Phase 3 extension medium; Phase 4 additions medium. Dependencies:
+**Effort:** Phase 4 extension medium; Phase 5 additions medium. Dependencies:
 #7 ENV telemetry (Phase 2), TX notify (exists), #8b multi-prefix parse path
-(Phase 3) for the PC -> stick mood line, #5a for the command log.
+(Phase 4) for the PC -> stick mood line, #5a for the command log.
+
+---
+
+## SPK. SPK2 audio HAT (mutually exclusive with ENV III)
+
+**Goal:** richer audio output via the M5Stack Hat SPK2 (MAX98357 I2S Class-D amp
++ 1 W speaker) — sirens, ambient mood loops, and short voice/WAV clips instead of
+just buzzer beeps. Full spec: `specification/spk2-audio-features.md`.
+
+**Hard constraint — one HAT at a time.** SPK2 (I2S on G0/G25/G26) and the ENV III
+HAT (#7, I2C on G0/G26) share the single HAT port and collide on pins. A session
+runs **either** ENV III **or** SPK2, never both; firmware detects which HAT is
+present at boot and enables the matching feature set.
+
+**Design principle:** SPK2 is just another output. The existing sound system
+(button beeps, mood alerts, low-battery, 8a melodies) keeps its logic — SPK only
+changes *where* the audio renders (I2S amp vs. built-in speaker). Everything below
+is additive on top of SPK-1 routing.
+
+Feature set (detailed in the spec):
+- **SPK-1** audio routing + HAT detection (foundation; enables the rest).
+- **SPK-2** mood ambient loops — a continuous low-volume "voice" per mood.
+- **SPK-3** panic siren escalating with the #2 panic tiers (instant silence on revert).
+- **SPK-4** sampled WAV/PCM notifications from flash (boot chime, overheating, ...).
+- **SPK-5** UI sound feedback (screen switch, char change, mute, wake).
+- **SPK-6** agent-event sounds (disk #6, remote 5a, kill 5b) — incremental.
+- **SPK-7** ambient heartbeat / hourly chime (uses the 1.1 tick).
+- **SPK-8** reactive chirps on sharp metric changes ("commentary").
+- **SPK-9** volume policy / quiet hours (reads levels from the #8b config channel).
+
+**Relationship:** SPK-1 routes the 8a melodies to the amp; SPK-3 is the audio half
+of #2; SPK-6 rides #6 / 5a / 5b as they land; SPK-9 uses 8b. Mutually exclusive
+with #7 (ENV III) at the hardware level.
+
+**Effort:** SPK-1/5 low; SPK-2/3/4/8 medium; SPK-7/9 low-medium. Dependencies:
+SPK2 HAT; 8a melody helper (Phase 1); #2 panic tiers (Phase 1); #8b for SPK-9.
 
 ---
 
@@ -309,17 +351,50 @@ thresholds. #6 is small and independent, rounds out the metric picture.
 Autonomous from the PC link. Adds an ENV screen (temp / humidity / pressure)
 and an optional mood modifier. Demo-friendly; works even without BLE.
 
-### Phase 3 — PlatformIO migration + configurable thresholds + security review + live TUI (stage 6)
+### Phase 3 — SPK2 audio HAT (stage 6)
 
 | Stage | Content | Effort |
 |---|---|---|
-| 6-pre | Migrate firmware build from Arduino IDE to PlatformIO | low-medium |
-| 6a | 8b threshold config channel — `CFG;`-prefixed line over RX | low-medium |
-| 6b | Security review of BLE input parsing | low |
-| 6c | Stick mood telemetry — device emits `MOOD;` over TX notify | low |
-| 6d | TUI live companion — live mood + live ENV from the stick; fold the CSV viewer in as a logs browser | medium |
+| 6a | SPK-1 audio routing + HAT detection (I2S on G25/G26/G0; fall back to built-in speaker) | low |
+| 6b | SPK-5 UI sound feedback + SPK-3 panic siren (escalates with #2 tiers, instant silence on revert) | low-medium |
+| 6c | SPK-2 mood ambient loops ("the pet has a voice") | medium |
+| 6d | SPK-4 WAV/PCM notifications from flash (boot chime, overheating, low power, back online) | medium |
+| 6e | SPK-7 heartbeat / SPK-8 reactive chirps — incremental polish | low-medium |
 
-**Build migration (6-pre):** starting from this phase the firmware builds with
+Richer audio via the M5Stack Hat SPK2 (MAX98357 I2S amp + 1 W speaker). Full
+feature spec: `specification/spk2-audio-features.md`; summary in feature **SPK**
+above.
+
+**Hardware exclusivity:** SPK2 (I2S on G0/G25/G26) and the Phase-2 ENV III HAT
+(I2C on G0/G26) share the single HAT port and collide on pins — only one can be
+fitted at a time. The firmware detects which HAT is present at boot and enables
+the matching feature set; a session runs **either** ENV III **or** SPK2, never
+both.
+
+**Routing first (6a):** SPK-1 is the foundation — it only changes *where* audio
+renders (I2S amp vs. built-in speaker). The existing beeps and the Phase-1 8a
+melodies play unchanged, just louder/clearer. SPK-3 reuses the #2 panic tiers as
+its audio half, honouring the same instant-revert rule (siren stops the moment
+panic clears).
+
+**Deferred SPK pieces:** SPK-6 (agent-event sounds for 5a/5b) lands incrementally
+with those features in later phases; SPK-9 (volume policy / quiet hours) depends
+on the #8b config channel (Phase 4), so it follows the config work. Both are
+noted in the SPK spec's phasing.
+
+This phase stays on the Arduino IDE (the PlatformIO migration is Phase 4).
+
+### Phase 4 — PlatformIO migration + configurable thresholds + security review + live TUI (stage 7)
+
+| Stage | Content | Effort |
+|---|---|---|
+| 7-pre | Migrate firmware build from Arduino IDE to PlatformIO | low-medium |
+| 7a | 8b threshold config channel — `CFG;`-prefixed line over RX | low-medium |
+| 7b | Security review of BLE input parsing | low |
+| 7c | Stick mood telemetry — device emits `MOOD;` over TX notify | low |
+| 7d | TUI live companion — live mood + live ENV from the stick; fold the CSV viewer in as a logs browser | medium |
+
+**Build migration (7-pre):** starting from this phase the firmware builds with
 PlatformIO instead of the Arduino IDE. Steps:
 - Add `platformio.ini` at the repo root targeting `m5stick-c` (ESP32-PICO,
   arduino framework).
@@ -332,7 +407,7 @@ PlatformIO instead of the Arduino IDE. Steps:
 - Keep the old `.ino` path noted in a one-time migration note so anyone on the
   Arduino IDE path knows where the source moved.
 
-Phases 1-2 remain Arduino IDE. Phases 3-5 use PlatformIO.
+Phases 1-3 remain Arduino IDE. Phases 4-6 use PlatformIO.
 
 Cross-cutting (agent + device). Makes mood and panic-tier thresholds
 configurable from the agent side. Sent on connect; no NVS needed.
@@ -344,42 +419,42 @@ ensuring the metric parse path cannot be tricked by a `CFG`-shaped metric packet
 Also audit the existing `parsePacket()` path (atoi overflow, strncpy bounds,
 strtok edge cases) while the parsing code is open.
 
-**Live TUI (6c, 6d):** the device starts emitting its current mood as a `MOOD;`
-notify line (6c, a small firmware addition next to the `ENV;` telemetry). The
-Phase-2 CSV viewer is then extended (6d) into a live companion app: it subscribes
+**Live TUI (7c, 7d):** the device starts emitting its current mood as a `MOOD;`
+notify line (7c, a small firmware addition next to the `ENV;` telemetry). The
+Phase-2 CSV viewer is then extended (7d) into a live companion app: it subscribes
 to the stick's TX channel and shows the character's live mood and live ENV
 readings, while the existing CSV charts move into a "logs browser" tab for
 historical data (with rotated-file support and time windows). One app, two modes:
 live and historical. See feature #9 for the full picture.
 
-### Phase 4 — Remote control + TUI command log & mood control (stage 7)
+### Phase 5 — Remote control + TUI command log & mood control (stage 8)
 
 | Stage | Content | Effort |
 |---|---|---|
-| 7 | 5a reverse channel — safe commands over TX notify | medium |
-| 7b | Command log + visualization — log every reverse-channel command; separate TUI view from telemetry | low-medium |
-| 7c | Mood control — user sends a `MOOD;` signal from the TUI to the stick (PC -> device) | medium |
+| 8 | 5a reverse channel — safe commands over TX notify | medium |
+| 8b | Command log + visualization — log every reverse-channel command; separate TUI view from telemetry | low-medium |
+| 8c | Mood control — user sends a `MOOD;` signal from the TUI to the stick (PC -> device) | medium |
 
 Lock screen, play/pause, volume, run-script. A new Remote screen in
 the BtnA cycle; long-press to execute. Whitelist only.
 
-**Command log (7b):** as commands fire (7), the agent records each one
+**Command log (8b):** as commands fire (8), the agent records each one
 (timestamp, command, result) to its own log and the TUI shows them in a
 dedicated view, kept **separate from the ENV telemetry** so command history and
 climate data never mix. Reuses the rotated-log approach from the ENV logging.
 
-**Mood control (7c):** the TUI gains a control to push a mood signal to the stick
+**Mood control (8c):** the TUI gains a control to push a mood signal to the stick
 over the RX characteristic (`MOOD;` line, distinguished from metrics and `CFG;`
-by its first token — reusing the multi-prefix parse path added in Phase 3/8b).
-The character on the stick then reflects the user-chosen mood. See feature #9 and
-its open question on whether a sent mood overrides the PC-metric mood or only
-applies when metrics are calm.
+by its first token — reusing the multi-prefix parse path added in Phase 4 by the
+#8b config channel). The character on the stick then reflects the user-chosen
+mood. See feature #9 and its open question on whether a sent mood overrides the
+PC-metric mood or only applies when metrics are calm.
 
-### Phase 5 — Kill (stage 8)
+### Phase 6 — Kill (stage 9)
 
 | Stage | Content | Effort |
 |---|---|---|
-| 8 | 5b Kill — kill top / kill selected from Procs | medium-high |
+| 9 | 5b Kill — kill top / kill selected from Procs | medium-high |
 
 The only irreversible action. On-screen confirmation required. Depends on 5a
 plumbing. Scheduled last per its risk and low priority.
@@ -397,3 +472,7 @@ plumbing. Scheduled last per its risk and low priority.
 7. **#9 (TUI):** does a user-sent mood override the PC-metric mood for a fixed
    duration, or only apply when metrics are calm? Event-driven vs cadence mood
    push from the stick. Command-log format (rotated CSV vs separate log).
+8. **SPK2 audio:** synthesized tones vs. WAV samples (SPK-2/4); flash budget and
+   asset format for samples; whether mute silences critical alerts (SPK-9);
+   ENV III vs. SPK2 HAT auto-detection method. Full list in
+   `specification/spk2-audio-features.md`.
