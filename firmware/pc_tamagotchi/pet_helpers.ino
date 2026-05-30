@@ -35,6 +35,48 @@ void tickSiren(int tier) {
   g_sirenIdx++;
 }
 
+// Non-blocking mood ambient loop (PCP-014). Quiet per-mood "voice" on a
+// dedicated channel (AMB_CH) so it sits under the UI cues; fades in/out on
+// mood change; off when not SPK2, muted, or panicking (the siren owns audio).
+// NOTE: channel/volume API names (tone channel arg, setChannelVolume) vary by
+// M5Unified version -- verify on-device.
+void tickAmbient(Mood mood, int tier) {
+  const MelNote* pat = nullptr;
+  switch (mood) {
+    case M_HAPPY:   pat = AMB_HAPPY;   break;
+    case M_SLEEP:   pat = AMB_SLEEP;   break;
+    case M_BUSY:    pat = AMB_BUSY;    break;
+    case M_STUFFED: pat = AMB_STUFFED; break;
+    case M_LOWPWR:  pat = AMB_LOWPWR;  break;
+    default:        pat = nullptr;     break;   // HOT / PANIC: no ambient
+  }
+  bool active = (g_hat == HAT_SPK2) && !g_mute && tier == 0 && pat != nullptr;
+
+  if (!active) {                          // fade out, then go silent
+    if (g_ambVol > 0) {
+      g_ambVol = (g_ambVol > 4) ? g_ambVol - 4 : 0;
+      M5.Speaker.setChannelVolume(AMB_CH, g_ambVol);
+      if (g_ambVol == 0) g_ambMood = -1;
+    }
+    return;
+  }
+
+  if ((int)mood != g_ambMood) {           // mood changed -> restart pattern
+    g_ambMood = mood;
+    g_ambIdx  = 0;
+    g_ambNext = 0;
+  }
+  if (g_ambVol < AMB_VOL) g_ambVol += 2;  // fade in
+  M5.Speaker.setChannelVolume(AMB_CH, g_ambVol);
+
+  if (millis() < g_ambNext) return;
+  if (pat[g_ambIdx].freq == 0) g_ambIdx = 0;   // loop
+  const MelNote& n = pat[g_ambIdx];
+  M5.Speaker.tone(n.freq, n.durMs, AMB_CH);
+  g_ambNext = millis() + n.durMs + n.pauseMs;
+  g_ambIdx++;
+}
+
 uint16_t lerpColor(uint16_t a, uint16_t b, float t) {
   // simple 565 blend
   int ar = (a >> 11) & 0x1F, ag = (a >> 5) & 0x3F, ab = a & 0x1F;

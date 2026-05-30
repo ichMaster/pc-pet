@@ -406,6 +406,15 @@ const MelNote SIREN_T1[] = { {2200, 90, 500}, {0,0,0} };
 const MelNote SIREN_T2[] = { {2000, 90, 70}, {2500, 90, 260}, {0,0,0} };
 const MelNote SIREN_T3[] = { {2600, 110, 0}, {2200, 110, 0}, {0,0,0} };
 
+// ---- mood ambient loops (PCP-014): quiet, looped, SPK2 only ----
+// Sparse low-volume "voice" per calm mood, played on a dedicated speaker
+// channel (AMB_CH) at a low channel volume so it sits under the UI cues.
+const MelNote AMB_HAPPY[]   = { {220, 120, 700}, {233, 120, 1400}, {0,0,0} };   // soft purr
+const MelNote AMB_SLEEP[]   = { {180, 300, 2600}, {0,0,0} };                    // slow breathing
+const MelNote AMB_BUSY[]    = { {520, 40, 180}, {520, 40, 700}, {0,0,0} };      // blip-blip
+const MelNote AMB_STUFFED[] = { {300, 280, 3200}, {0,0,0} };                    // content sigh
+const MelNote AMB_LOWPWR[]  = { {260, 200, 1800}, {200, 240, 2600}, {0,0,0} };  // faint whimper
+
 // =================  helpers / rendering  ======================
 // Logic helpers (playMelody, currentMood, colours, panic tiers, pressure
 // trend, ENV modifier, drawBar) now live in pet_helpers.ino.
@@ -420,6 +429,14 @@ Mood     g_prevMood = M_HAPPY;
 int      g_sirenTier = 0;     // 0 = off; else the tier currently sounding
 int      g_sirenIdx  = 0;     // index into the active SIREN_T* pattern
 uint32_t g_sirenNext = 0;     // millis() when the next note should fire
+
+// ---- mood ambient state (PCP-014) ----
+const uint8_t AMB_CH     = 1;     // dedicated speaker channel (cues/siren use 0)
+const uint8_t AMB_VOL    = 32;    // target channel volume (0-255), quiet
+int      g_ambMood = -1;          // mood currently sounding (-1 = none)
+int      g_ambIdx  = 0;           // index into the active AMB_* pattern
+uint32_t g_ambNext = 0;           // millis() of the next ambient note
+int      g_ambVol  = 0;           // current faded channel volume
 
 void loop() {
   M5.update();
@@ -538,8 +555,12 @@ void loop() {
     }
   }
 
-  // ---- panic siren (PCP-013): non-blocking, escalates with the tier ----
-  tickSiren(mood == M_PANIC ? panicTier(g_panicSec) : 0);
+  // ---- panic siren (PCP-013) + mood ambient (PCP-014): non-blocking ----
+  {
+    int ptier = (mood == M_PANIC) ? panicTier(g_panicSec) : 0;
+    tickSiren(ptier);
+    tickAmbient(mood, ptier);
+  }
 
   // ---- ENV III read (PCP-005): slow, gated; I2C reads block ----
   if (g_envPresent && millis() - g_lastEnvRead >= 2000) {
