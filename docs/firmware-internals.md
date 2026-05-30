@@ -201,8 +201,8 @@ is never written from the BLE callback.
 
 | Variable | Purpose |
 |----------|---------|
-| g_sht30 | SHT3X temperature + humidity sensor object (Wire1) |
-| g_qmp6988 | QMP6988 barometric pressure sensor object (Wire1) |
+| g_sht30 | SHT3X temperature + humidity sensor object (Wire) |
+| g_qmp6988 | QMP6988 barometric pressure sensor object (Wire) |
 | g_envPresent | True only if both sensors initialized at boot |
 | g_envTemp | Room temperature (float, C) |
 | g_envHum | Relative humidity (float, %) |
@@ -581,7 +581,7 @@ Each melody is a null-terminated array of `MelNote { freq, durMs, pauseMs }`.
 
 | Constant | Value |
 |----------|-------|
-| Wire1 pins | SDA = GPIO 0, SCL = GPIO 26 |
+| Wire pins | SDA = GPIO 0, SCL = GPIO 26 |
 | SHT30 address | 0x44 |
 | QMP6988 address | 0x76 |
 | Sensor read gate | ~2000 ms |
