@@ -11,7 +11,7 @@
  *    pet_types.h    enums / structs
  *    pet_config.h   all constants + melody data
  *    pet_state.h    all mutable globals
- *    pet_ble.ino    RX callbacks + packet parsing
+ *    pet_ble.h      RX callbacks + packet parsing (header: classes used by setup)
  *    pet_audio.ino  melodies, siren, ambient, voice, heartbeat, chirps
  *    pet_mood.ino   mood / character / pressure / ENV-modifier logic
  *    pet_render.ino character art, pet renderer, view screens
@@ -30,6 +30,7 @@
 #include "pet_types.h"     // shared enums/structs (visible to auto-prototypes)
 #include "pet_config.h"    // constants + melody data
 #include "pet_state.h"     // mutable globals (must come after the libs above)
+#include "pet_ble.h"       // BLE callback classes -- needed by setup() below
 
 // =================  setup  ====================================
 void setup() {

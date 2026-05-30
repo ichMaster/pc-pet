@@ -1,8 +1,17 @@
-// pet_ble.ino -- BLE receive path: callbacks + packet parsing.
+// pet_ble.h -- BLE receive path: callbacks + packet parsing.
 //
-// Arduino tab (concatenated onto the main sketch). Globals live in pet_state.h,
-// constants in pet_config.h. The onWrite callback runs on the small-stack BT
-// task, so it only stashes raw bytes; parsePacket() runs later on the main task.
+// A HEADER, not a tab: the RxCallbacks / ServerCallbacks classes must be visible
+// to setup() in the main sketch, and Arduino only auto-prototypes free functions
+// (not classes) across tabs. Included once (from the main sketch, after
+// pet_state.h) so its function definitions don't violate the ODR. The onWrite
+// callback runs on the small-stack BT task, so it only stashes raw bytes;
+// parsePacket() runs later on the main task.
+#pragma once
+#include <M5Unified.h>
+#include <BLEDevice.h>
+#include "pet_types.h"
+#include "pet_config.h"
+#include "pet_state.h"
 
 // Copy raw RX bytes into g_rxBuf and flag for the main loop (BT task context).
 static void stashBytes(const uint8_t* data, size_t len) {
