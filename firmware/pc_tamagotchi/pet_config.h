@@ -24,7 +24,7 @@ const uint32_t STALE_LINK_MS = 6000;   // no packet this long -> disconnected
 //   HAT_SELECT = -1        auto-probe ENV III; no HAT if absent (never SPK2)
 //   HAT_SELECT = HAT_ENV   same as auto (probe ENV III)
 //   HAT_SELECT = HAT_SPK2  force the SPK2 I2S amp (skips the ENV probe)
-#define HAT_SELECT HAT_SPK2
+#define HAT_SELECT (-1)
 
 // SPK2 I2S pins (MAX98357 on the top HAT connector).
 #define SPK2_PIN_DATA 25       // DOUT = G25
