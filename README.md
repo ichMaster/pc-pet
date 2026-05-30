@@ -25,6 +25,7 @@ pc-pet/
 │   └── cpu_stress.py             # CPU load generator for testing moods
 ├── docs/
 │   ├── protocol.md               # BLE packet protocol reference
+│   ├── firmware-internals.md     # detailed firmware walkthrough
 │   └── development-workflow.md   # Claude Code skills usage guide
 ├── specification/
 │   ├── phase1-core-mechanics.md  # Phase 1 issue specs
