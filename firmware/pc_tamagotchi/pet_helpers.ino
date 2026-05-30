@@ -12,6 +12,29 @@ void playMelody(const MelNote* mel) {
   }
 }
 
+// Non-blocking panic siren (PCP-013). Call every loop with the current panic
+// tier (0 = not panicking). It advances one looped note per call based on
+// millis(), so the animation never freezes. Instant silence when tier drops to
+// 0 (matches the #2 instant-revert rule) or when muted.
+void tickSiren(int tier) {
+  if (tier < 1 || g_mute) {
+    if (g_sirenTier != 0) { M5.Speaker.stop(); g_sirenTier = 0; g_sirenIdx = 0; }
+    return;
+  }
+  if (tier != g_sirenTier) {      // tier changed -> restart pattern immediately
+    g_sirenTier = tier;
+    g_sirenIdx  = 0;
+    g_sirenNext = 0;
+  }
+  if (millis() < g_sirenNext) return;
+  const MelNote* pat = (tier >= 3) ? SIREN_T3 : (tier == 2) ? SIREN_T2 : SIREN_T1;
+  if (pat[g_sirenIdx].freq == 0) g_sirenIdx = 0;   // loop back to the start
+  const MelNote& n = pat[g_sirenIdx];
+  M5.Speaker.tone(n.freq, n.durMs);
+  g_sirenNext = millis() + n.durMs + n.pauseMs;
+  g_sirenIdx++;
+}
+
 uint16_t lerpColor(uint16_t a, uint16_t b, float t) {
   // simple 565 blend
   int ar = (a >> 11) & 0x1F, ag = (a >> 5) & 0x3F, ab = a & 0x1F;

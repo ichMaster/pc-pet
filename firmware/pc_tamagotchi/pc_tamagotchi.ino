@@ -397,6 +397,14 @@ const MelNote MEL_CLICK[]      = { {1500, 30, 0}, {0,0,0} };
 const MelNote MEL_CHARSWITCH[] = { {1700, 30, 0}, {0,0,0} };
 const MelNote MEL_MUTE_ON[]    = { {600, 40, 0}, {0,0,0} };
 const MelNote MEL_MUTE_OFF[]   = { {1800, 40, 0}, {0,0,0} };
+const MelNote MEL_WAKE[]       = { {1400, 25, 0}, {1900, 35, 0}, {0,0,0} };
+
+// ---- panic siren patterns (PCP-013): looped non-blocking by tickSiren ----
+// Tier 1: slow single chirp.  Tier 2: faster two-tone.  Tier 3: continuous
+// rising/falling sweep (no gaps). Each array loops until panic clears.
+const MelNote SIREN_T1[] = { {2200, 90, 500}, {0,0,0} };
+const MelNote SIREN_T2[] = { {2000, 90, 70}, {2500, 90, 260}, {0,0,0} };
+const MelNote SIREN_T3[] = { {2600, 110, 0}, {2200, 110, 0}, {0,0,0} };
 
 // =================  helpers / rendering  ======================
 // Logic helpers (playMelody, currentMood, colours, panic tiers, pressure
@@ -407,6 +415,11 @@ const MelNote MEL_MUTE_OFF[]   = { {1800, 40, 0}, {0,0,0} };
 // =================  main loop  ================================
 uint32_t g_frame = 0;
 Mood     g_prevMood = M_HAPPY;
+
+// ---- non-blocking panic siren state (PCP-013) ----
+int      g_sirenTier = 0;     // 0 = off; else the tier currently sounding
+int      g_sirenIdx  = 0;     // index into the active SIREN_T* pattern
+uint32_t g_sirenNext = 0;     // millis() when the next note should fire
 
 void loop() {
   M5.update();
@@ -423,9 +436,11 @@ void loop() {
           if (g_shakeStart == 0 || now - g_lastShake > 400) g_shakeStart = now;
           g_lastShake = now;
           if (now - g_shakeStart >= SHAKE_HOLD_MS) {   // shaken long enough -> wake
+            bool wasOff = g_forceOff || (now - g_lastActivity >= OFF_AFTER_MS);
             g_lastActivity = now;
             g_forceOff = false;
             g_shakeStart = 0;
+            if (wasOff) playMelody(MEL_WAKE);   // PCP-013 wake cue
           }
         } else if (now - g_lastShake > 400) {
           g_shakeStart = 0;                            // shaking stopped -> reset
@@ -517,17 +532,14 @@ void loop() {
     g_lastTick1s = millis();
     g_uptimeSec++;
     if (mood == M_PANIC) {
-      g_panicSec++;
-      int tier = panicTier(g_panicSec);
-      int prevTier = panicTier(g_panicSec - 1);
-      if (tier != prevTier) {
-        if (tier == 2) playMelody(MEL_PANIC2);
-        if (tier == 3) playMelody(MEL_PANIC3);
-      }
+      g_panicSec++;   // tier audio handled by the non-blocking siren (PCP-013)
     } else {
       g_panicSec = 0;
     }
   }
+
+  // ---- panic siren (PCP-013): non-blocking, escalates with the tier ----
+  tickSiren(mood == M_PANIC ? panicTier(g_panicSec) : 0);
 
   // ---- ENV III read (PCP-005): slow, gated; I2C reads block ----
   if (g_envPresent && millis() - g_lastEnvRead >= 2000) {
