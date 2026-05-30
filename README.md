@@ -151,6 +151,10 @@ brew install vladkens/tap/macmon
 
 python3 pc_pet_agent.py
 # options: --name PCpet --interval 1.5 --address <BLE-addr>
+# ENV telemetry (ENV III HAT): device notifies room readings, logged to a CSV
+#   --env-log env_log.csv         CSV path (empty string disables logging)
+#   --env-log-max-bytes 5000000   rotate the log at this size (size-based)
+#   --env-log-keep 5              rotated files kept; disk <= (keep+1)*max-bytes
 ```
 
 `scan.py` lists all advertising BLE devices — useful to confirm the stick is

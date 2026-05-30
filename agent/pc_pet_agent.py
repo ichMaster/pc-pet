@@ -21,6 +21,7 @@ Run:
 import argparse
 import asyncio
 import json
+import os
 import shutil
 import subprocess
 import sys
@@ -32,6 +33,7 @@ from bleak import BleakClient, BleakScanner
 
 # Nordic UART Service - must match the firmware
 RX_UUID = "6e400002-b5a3-f393-e0a9-e50e24dcca9e"   # we write here
+TX_UUID = "6e400003-b5a3-f393-e0a9-e50e24dcca9e"   # device notifies here (PCP-009)
 DEFAULT_NAME = "PCpet"
 
 
@@ -144,6 +146,90 @@ def read_battery() -> tuple[int, int]:
     return int(round(b.percent)), (1 if b.power_plugged else 0)
 
 
+class EnvLogger:
+    """Logs ENV telemetry (PCP-009) from the device to an append-only CSV with
+    size-based rotation (PCP-010).
+
+    Parses `ENV;temp=..;hum=..;press=..` notify lines, appends a timestamped
+    row, and echoes a one-line summary. When the active CSV reaches
+    ``max_bytes`` it rotates logrotate-style (``.1 .. .N``, oldest discarded)
+    via atomic ``os.replace``. Logging is disabled when ``path`` is empty.
+    """
+
+    HEADER = "timestamp,temp_c,humidity_pct,pressure_hpa\n"
+
+    def __init__(self, path, max_bytes=5_000_000, keep=5):
+        self.path = path or None
+        self.max_bytes = max_bytes
+        self.keep = keep
+        self._size = 0
+        if self.path:
+            if not os.path.exists(self.path):
+                with open(self.path, "a", encoding="utf-8") as f:
+                    f.write(self.HEADER)
+            try:
+                self._size = os.path.getsize(self.path)
+            except OSError:
+                self._size = 0
+
+    @staticmethod
+    def parse(line):
+        """Return (temp, hum, press) from an ENV line, or None if not ENV."""
+        if not line.startswith("ENV;"):
+            return None
+        fields = {}
+        for tok in line[4:].split(";"):
+            if "=" in tok:
+                k, v = tok.split("=", 1)
+                fields[k.strip()] = v.strip()
+        try:
+            return (float(fields["temp"]), float(fields["hum"]),
+                    float(fields["press"]))
+        except (KeyError, ValueError):
+            return None
+
+    def _rotate(self):
+        """Size rotation (PCP-010): atomic renames, no rewrite of active log."""
+        if not self.path:
+            return
+        oldest = f"{self.path}.{self.keep}"
+        if os.path.exists(oldest):
+            try:
+                os.remove(oldest)
+            except OSError:
+                pass
+        for i in range(self.keep - 1, 0, -1):
+            src, dst = f"{self.path}.{i}", f"{self.path}.{i + 1}"
+            if os.path.exists(src):
+                os.replace(src, dst)
+        os.replace(self.path, f"{self.path}.1")
+        with open(self.path, "a", encoding="utf-8") as f:
+            f.write(self.HEADER)
+        self._size = len(self.HEADER.encode("utf-8"))
+
+    def handle(self, raw):
+        """Notify callback target: decode, parse, log + echo. Never raises."""
+        try:
+            line = raw.decode("utf-8", "replace").strip()
+        except Exception:
+            return
+        parsed = self.parse(line)
+        if parsed is None:
+            return  # not an ENV line (forward-compat for other reverse msgs)
+        temp, hum, press = parsed
+        print(f"[env] {temp:.1f}C  {int(hum)}%  {int(press)}hPa")
+        if not self.path:
+            return
+        ts = time.strftime("%Y-%m-%dT%H:%M:%S")
+        row = f"{ts},{temp:.1f},{int(hum)},{int(press)}\n"
+        rb = len(row.encode("utf-8"))
+        if self.max_bytes and self._size + rb > self.max_bytes:
+            self._rotate()
+        with open(self.path, "a", encoding="utf-8") as f:
+            f.write(row)
+        self._size += rb
+
+
 class Metrics:
     """Collects metrics; keeps net + per-process CPU state between calls."""
 
@@ -245,9 +331,17 @@ async def find_device(name: str, address: str | None = None):
     return None
 
 
-async def stream(dev, metrics: Metrics, interval: float):
+async def stream(dev, metrics: Metrics, interval: float, env_logger=None):
     async with BleakClient(dev) as client:
         print(f"[ble ] connected to {dev.address}")
+        # ENV telemetry (PCP-009): subscribe to device notifications and log them
+        if env_logger is not None:
+            def _on_notify(_sender, data: bytearray):
+                env_logger.handle(bytes(data))
+            try:
+                await client.start_notify(TX_UUID, _on_notify)
+            except Exception as e:
+                print(f"[env ] notify subscribe failed (continuing): {e}")
         # warm up per-process counters so the first 'top' is meaningful
         metrics._top_lists()
         await asyncio.sleep(min(interval, 1.0))
@@ -270,9 +364,16 @@ async def main():
                     help="seconds between updates")
     ap.add_argument("--address", default=None,
                     help="connect to this exact BLE address (from scan.py)")
+    ap.add_argument("--env-log", default="env_log.csv",
+                    help="ENV telemetry CSV path (empty string disables logging)")
+    ap.add_argument("--env-log-max-bytes", type=int, default=5_000_000,
+                    help="rotate env log when it reaches this size (bytes)")
+    ap.add_argument("--env-log-keep", type=int, default=5,
+                    help="number of rotated env log files to keep")
     args = ap.parse_args()
 
     metrics = Metrics()
+    env_logger = EnvLogger(args.env_log, args.env_log_max_bytes, args.env_log_keep)
     print("PC-Pet agent - Ctrl+C to quit")
     while True:
         try:
@@ -281,7 +382,7 @@ async def main():
                 print("[scan] not found, retrying in 5s")
                 await asyncio.sleep(5)
                 continue
-            await stream(dev, metrics, args.interval)
+            await stream(dev, metrics, args.interval, env_logger)
         except Exception as e:
             print(f"[err ] {e}")
         print("[main] reconnecting in 3s ...")
