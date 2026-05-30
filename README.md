@@ -22,7 +22,8 @@ pc-pet/
 │   ├── scan.py                   # BLE scan diagnostic
 │   └── requirements.txt
 ├── tools/
-│   └── cpu_stress.py             # CPU load generator for testing moods
+│   ├── cpu_stress.py             # CPU load generator for testing moods
+│   └── env_viewer/               # standalone ENV CSV viewer TUI (PCP-011)
 ├── docs/
 │   ├── protocol.md               # BLE packet protocol reference
 │   ├── firmware-internals.md     # detailed firmware walkthrough
