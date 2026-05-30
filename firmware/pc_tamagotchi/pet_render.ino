@@ -56,7 +56,7 @@ void drawCharBody(int cx, int cy, int rx, int ry, uint16_t col, int charId) {
 }
 
 // ----------- the creature ------------------------------------
-void drawPet(int cx, int cy, Mood mood, uint32_t frame) {
+void drawPet(int cx, int cy, Mood mood, uint32_t frame, EnvMod emod = ENV_NONE) {
   float t = frame * 0.18f;
   int tier = (mood == M_PANIC) ? panicTier(g_panicSec) : 0;
   uint16_t col = bodyColor(mood);
@@ -184,6 +184,25 @@ void drawPet(int cx, int cy, Mood mood, uint32_t frame) {
     canvas.fillCircle(cx - rx + 2, cy + 4, 6, lerpColor(col, TFT_WHITE, 0.15f));
     canvas.fillCircle(cx + rx - 2, cy + 4, 6, lerpColor(col, TFT_WHITE, 0.15f));
   }
+
+  // ---- ENV modifier effects (PCP-008) ----
+  // STUFFY: rising heat-shimmer wisps. WEATHER: falling rain streaks.
+  if (emod == ENV_STUFFY) {
+    uint16_t heat = canvas.color565(255, 170, 120);
+    for (int i = 0; i < 3; i++) {
+      int hx = cx - 16 + i * 16;
+      int hy = cy - ry - 6 - ((frame + i * 6) % 22);
+      canvas.drawPixel(hx + (int)(3 * sinf(t + i)), hy, heat);
+      canvas.drawPixel(hx + (int)(3 * sinf(t + i + 1.0f)), hy - 4, heat);
+    }
+  } else if (emod == ENV_WEATHER) {
+    uint16_t rain = canvas.color565(120, 170, 240);
+    for (int i = 0; i < 5; i++) {
+      int rx2 = cx - rx + 4 + i * ((rx * 2 - 8) / 4);
+      int ry2 = cy - ry - 10 + ((frame * 3 + i * 13) % 60);
+      canvas.drawLine(rx2, ry2, rx2 - 1, ry2 + 4, rain);
+    }
+  }
 }
 
 // =================  view renderers  ===========================
@@ -237,7 +256,7 @@ void viewPet(int cpu, int ram, int temp, int net, int procs,
   canvas.fillScreen(bg);
   renderTopBar(cpu, ram, temp, net, procs, top, connected);
 
-  drawPet(canvas.width() / 2, 96, mood, frame);
+  drawPet(canvas.width() / 2, 96, mood, frame, emod);
 
   // mood word
   canvas.setTextDatum(middle_center);
