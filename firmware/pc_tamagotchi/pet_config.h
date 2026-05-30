@@ -65,6 +65,11 @@ const uint32_t ENV_READ_MS     = 2000;    // sensor read cadence
 const uint32_t PRESS_LOG_MS    = 60000;   // pressure-trend log cadence
 const uint32_t ENV_SEND_MS     = 5000;    // ENV telemetry notify cadence
 
+// ---- event voice (PCP-015) ----
+// 1 = play recorded WAV/PCM clips from pet_assets.h via M5.Speaker.playRaw.
+// 0 = fall back to the synthesized MelNote jingles (MEL_BOOT etc.).
+#define USE_WAV_VOICE 1
+
 // ---- audio: channels + reactive tuning ----
 const uint8_t  AMB_CH         = 1;       // ambient channel (cues/siren use 0)
 const uint8_t  AMB_VOL        = 32;      // ambient target channel volume (0-255)

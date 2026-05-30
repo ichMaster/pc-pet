@@ -29,6 +29,7 @@
 #include "M5UnitENV.h"     // ENV III HAT (SHT30 + QMP6988)
 #include "pet_types.h"     // shared enums/structs (visible to auto-prototypes)
 #include "pet_config.h"    // constants + melody data
+#include "pet_assets.h"    // generated event-voice PCM clips (PCP-015)
 #include "pet_state.h"     // mutable globals (must come after the libs above)
 #include "pet_ble.h"       // BLE callback classes -- needed by setup() below
 
@@ -87,7 +88,7 @@ void setup() {
   Serial.printf("HAT: %s\n", g_hat == HAT_SPK2 ? "SPK2"
                            : g_hat == HAT_ENV  ? "ENV III" : "none");
 
-  playVoice(MEL_BOOT);   // boot chime (PCP-015, SPK2 only)
+  playVoice(MEL_BOOT, VOICE_BOOT_PCM, VOICE_BOOT_LEN);   // boot chime (PCP-015, SPK2 only)
 
   // ---- BLE peripheral ----
   BLEDevice::init(DEVICE_NAME);
@@ -222,12 +223,12 @@ void loop() {
   Mood mood = connected ? currentMood(cpu, ram, temp, gpu, pcbatt, pcchg) : M_SLEEP;
   if (connected && mood != g_prevMood) {
     if (mood == M_PANIC)       playMelody(MEL_ALERT);
-    else if (mood == M_HOT)    playVoice(MEL_OVERHEAT);
-    else if (mood == M_LOWPWR) playVoice(MEL_LOWVOICE);
+    else if (mood == M_HOT)    playVoice(MEL_OVERHEAT, VOICE_OVERHEAT_PCM, VOICE_OVERHEAT_LEN);
+    else if (mood == M_LOWPWR) playVoice(MEL_LOWVOICE, VOICE_LOWPWR_PCM, VOICE_LOWPWR_LEN);
   }
   g_prevMood = mood;
 
-  if (connected && !g_prevConnected) playVoice(MEL_ONLINE);   // back online
+  if (connected && !g_prevConnected) playVoice(MEL_ONLINE, VOICE_ONLINE_PCM, VOICE_ONLINE_LEN);   // back online
   g_prevConnected = connected;
 
   // ---- 1 Hz tick ----

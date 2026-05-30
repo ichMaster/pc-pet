@@ -15,11 +15,15 @@ void playMelody(const MelNote* mel) {
   }
 }
 
-// Event voice notification (PCP-015). Amp-only (SPK2).
-// DROP-IN for real audio: replace the playMelody() call with
-//   M5.Speaker.playRaw(pcm, len, sampleRate, false);   // from SPIFFS/PROGMEM
-void playVoice(const MelNote* mel) {
-  if (g_hat != HAT_SPK2) return;
+// Event voice notification (PCP-015). Amp-only (SPK2). Plays a recorded clip
+// (8-bit unsigned PCM from pet_assets.h) via M5.Speaker.playRaw when
+// USE_WAV_VOICE is set and a clip is provided; otherwise falls back to the
+// synthesized MelNote jingle. Honors mute. Non-blocking (playRaw is async).
+void playVoice(const MelNote* mel, const uint8_t* pcm, size_t pcmLen) {
+  if (g_hat != HAT_SPK2 || g_mute) return;
+#if USE_WAV_VOICE
+  if (pcm && pcmLen) { M5.Speaker.playRaw(pcm, pcmLen, VOICE_SR); return; }
+#endif
   playMelody(mel);
 }
 
