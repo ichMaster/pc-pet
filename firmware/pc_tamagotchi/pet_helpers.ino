@@ -45,6 +45,40 @@ void playVoice(const MelNote* mel) {
   playMelody(mel);
 }
 
+// Soft heartbeat whose rate follows CPU load (PCP-016). Off by default
+// (g_heartbeatOn); SPK2 only; non-blocking (one async tone per beat).
+void tickHeartbeat(int cpu) {
+  if (!g_heartbeatOn || g_hat != HAT_SPK2 || g_mute) return;
+  uint32_t interval = 1200 - (uint32_t)(constrain(cpu, 0, 100) * 9);  // 1200->300ms
+  if (interval < 300) interval = 300;
+  if (millis() - g_lastBeat >= interval) {
+    g_lastBeat = millis();
+    M5.Speaker.tone(110, 35);   // soft low "thump"
+  }
+}
+
+// Reactive chirp on a sharp metric change (PCP-016). Pitch maps to size +
+// direction; rate-limited by CHIRP_COOLDOWN. SPK2 only; non-blocking.
+void tickChirp(int cpu, int ram, int gpu, int temp) {
+  if (g_hat != HAT_SPK2 || g_mute) return;
+  if (millis() - g_lastChirp >= CHIRP_COOLDOWN) {
+    int dCpu  = cpu - g_pchCpu;
+    int dRam  = ram - g_pchRam;
+    int dGpu  = (gpu  < 0 ? 0 : gpu)  - (g_pchGpu  < 0 ? 0 : g_pchGpu);
+    int dTemp = (temp < 0 ? 0 : temp) - (g_pchTemp < 0 ? 0 : g_pchTemp);
+    int best = dCpu;                                  // largest-magnitude change
+    if (abs(dRam) > abs(best))      best = dRam;
+    if (abs(dGpu) > abs(best))      best = dGpu;
+    if (abs(dTemp) * 3 > abs(best)) best = dTemp * 3; // temp weighted (small range)
+    if (abs(best) >= 20) {
+      int freq = constrain(1500 + best * 12, 400, 3500);  // up=higher, down=lower
+      M5.Speaker.tone(freq, 60);
+      g_lastChirp = millis();
+    }
+  }
+  g_pchCpu = cpu; g_pchRam = ram; g_pchGpu = gpu; g_pchTemp = temp;
+}
+
 // Non-blocking mood ambient loop (PCP-014). Quiet per-mood "voice" on a
 // dedicated channel (AMB_CH) so it sits under the UI cues; fades in/out on
 // mood change; off when not SPK2, muted, or panicking (the siren owns audio).

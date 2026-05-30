@@ -450,6 +450,13 @@ int      g_ambIdx  = 0;           // index into the active AMB_* pattern
 uint32_t g_ambNext = 0;           // millis() of the next ambient note
 int      g_ambVol  = 0;           // current faded channel volume
 
+// ---- heartbeat + reactive chirps (PCP-016) ----
+bool     g_heartbeatOn = false;   // soft CPU-paced heartbeat, off by default
+uint32_t g_lastBeat  = 0;
+uint32_t g_lastChirp = 0;         // chirp cooldown timer
+const uint32_t CHIRP_COOLDOWN = 1500;   // ms between chirps
+int      g_pchCpu = 0, g_pchRam = 0, g_pchGpu = 0, g_pchTemp = 0;  // prev metrics
+
 void loop() {
   M5.update();
 
@@ -577,6 +584,8 @@ void loop() {
     int ptier = (mood == M_PANIC) ? panicTier(g_panicSec) : 0;
     tickSiren(ptier);
     tickAmbient(mood, ptier);
+    tickHeartbeat(cpu);                 // PCP-016
+    tickChirp(cpu, ram, gpu, temp);     // PCP-016
   }
 
   // ---- ENV III read (PCP-005): slow, gated; I2C reads block ----
