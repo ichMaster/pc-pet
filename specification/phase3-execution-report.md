@@ -24,10 +24,10 @@ No version bump pending an actual compile + amp test (see Caveats).
 | # | PCP ID | Title | Commit | Files |
 |---|--------|-------|--------|-------|
 | 16 | PCP-012 | SPK2 routing + HAT mode select | 7fe507c | pet_types.h, pc_tamagotchi.ino |
-| 17 | PCP-013 | UI cues + non-blocking panic siren | 91dd1a8 | pc_tamagotchi.ino, pet_helpers.ino |
-| 18 | PCP-014 | Mood ambient loops | b3a4c0e | pc_tamagotchi.ino, pet_helpers.ino |
-| 19 | PCP-015 | WAV/PCM notifications (framework) | 5f0d9c2 | pc_tamagotchi.ino, pet_helpers.ino |
-| 20 | PCP-016 | Heartbeat + reactive chirps | 7c3e1f0 | pc_tamagotchi.ino, pet_helpers.ino |
+| 17 | PCP-013 | UI cues + non-blocking panic siren | 304ebbf | pc_tamagotchi.ino, pet_helpers.ino |
+| 18 | PCP-014 | Mood ambient loops | e71b90e | pc_tamagotchi.ino, pet_helpers.ino |
+| 19 | PCP-015 | WAV/PCM notifications (framework) | acedb03 | pc_tamagotchi.ino, pet_helpers.ino |
+| 20 | PCP-016 | Heartbeat + reactive chirps | 0aec888 | pc_tamagotchi.ino, pet_helpers.ino |
 
 ## What was built
 
