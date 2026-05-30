@@ -345,6 +345,8 @@ void setup() {
   Serial.printf("HAT: %s\n", g_hat == HAT_SPK2 ? "SPK2"
                            : g_hat == HAT_ENV  ? "ENV III" : "none");
 
+  playVoice(MEL_BOOT);   // boot chime (PCP-015, SPK2 only)
+
   // ---- BLE peripheral ----
   BLEDevice::init(DEVICE_NAME);
   BLEDevice::setMTU(185);
@@ -399,6 +401,15 @@ const MelNote MEL_MUTE_ON[]    = { {600, 40, 0}, {0,0,0} };
 const MelNote MEL_MUTE_OFF[]   = { {1800, 40, 0}, {0,0,0} };
 const MelNote MEL_WAKE[]       = { {1400, 25, 0}, {1900, 35, 0}, {0,0,0} };
 
+// ---- event "voice" jingles (PCP-015) ----
+// Synthesized placeholders for the event notifications. Real recorded WAV/PCM
+// from flash (SPIFFS/LittleFS or PROGMEM) drops in here via M5.Speaker.playRaw;
+// see playVoice() in pet_helpers.ino. These play on the I2S amp (SPK2 only).
+const MelNote MEL_BOOT[]     = { {880, 80, 20}, {1320, 80, 20}, {1760, 140, 0}, {0,0,0} };
+const MelNote MEL_OVERHEAT[] = { {1600, 120, 40}, {1400, 120, 40}, {1200, 200, 0}, {0,0,0} };
+const MelNote MEL_LOWVOICE[] = { {700, 160, 60}, {500, 160, 60}, {350, 260, 0}, {0,0,0} };
+const MelNote MEL_ONLINE[]   = { {1046, 70, 20}, {1318, 70, 20}, {1568, 70, 20}, {2093, 150, 0}, {0,0,0} };
+
 // ---- panic siren patterns (PCP-013): looped non-blocking by tickSiren ----
 // Tier 1: slow single chirp.  Tier 2: faster two-tone.  Tier 3: continuous
 // rising/falling sweep (no gaps). Each array loops until panic clears.
@@ -424,6 +435,7 @@ const MelNote AMB_LOWPWR[]  = { {260, 200, 1800}, {200, 240, 2600}, {0,0,0} };  
 // =================  main loop  ================================
 uint32_t g_frame = 0;
 Mood     g_prevMood = M_HAPPY;
+bool     g_prevConnected = false;   // for the "back online" event (PCP-015)
 
 // ---- non-blocking panic siren state (PCP-013) ----
 int      g_sirenTier = 0;     // 0 = off; else the tier currently sounding
@@ -536,13 +548,18 @@ void loop() {
   // stale link -> treat as disconnected after 6 s
   if (connected && millis() - last > 6000) connected = false;
 
-  // ---- alert beeps on mood escalation ----
+  // ---- alert beeps + event voice on mood escalation (PCP-015) ----
   Mood mood = connected ? currentMood(cpu, ram, temp, gpu, pcbatt, pcchg) : M_SLEEP;
-  if (connected && mood != g_prevMood &&
-      (mood == M_PANIC || mood == M_HOT)) {
-    playMelody(MEL_ALERT);
+  if (connected && mood != g_prevMood) {
+    if (mood == M_PANIC)       playMelody(MEL_ALERT);
+    else if (mood == M_HOT)    playVoice(MEL_OVERHEAT);
+    else if (mood == M_LOWPWR) playVoice(MEL_LOWVOICE);
   }
   g_prevMood = mood;
+
+  // "back online" voice when the BLE link recovers (PCP-015)
+  if (connected && !g_prevConnected) playVoice(MEL_ONLINE);
+  g_prevConnected = connected;
 
   // ---- 1 Hz tick ----
   if (millis() - g_lastTick1s >= 1000) {

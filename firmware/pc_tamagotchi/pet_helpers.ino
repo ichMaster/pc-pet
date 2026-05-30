@@ -35,6 +35,16 @@ void tickSiren(int tier) {
   g_sirenIdx++;
 }
 
+// Event voice notification (PCP-015). Amp-only (SPK2). Plays a short clip for
+// boot / overheat / low-power / back-online events.
+// DROP-IN for real audio: replace the playMelody() call with
+//   M5.Speaker.playRaw(pcm, len, sampleRate, false);   // from SPIFFS/PROGMEM
+// The synthesized jingle is a placeholder until recorded assets exist.
+void playVoice(const MelNote* mel) {
+  if (g_hat != HAT_SPK2) return;
+  playMelody(mel);
+}
+
 // Non-blocking mood ambient loop (PCP-014). Quiet per-mood "voice" on a
 // dedicated channel (AMB_CH) so it sits under the UI cues; fades in/out on
 // mood change; off when not SPK2, muted, or panicking (the siren owns audio).
