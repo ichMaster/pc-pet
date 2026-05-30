@@ -183,7 +183,8 @@ default) so you can see each state on the device.
 
 ## Controls
 
-- **BtnA** (front, M5 logo): cycle screens — Pet -> Stats -> Graph -> Procs.
+- **BtnA** (front, M5 logo): cycle screens — Pet -> Stats -> Graph -> Procs -> Env.
+  The Env screen is included in the cycle only when the ENV III HAT is attached.
 - **BtnB** (side): single click cycles the character; double click toggles mute.
 - **Power button** (lower left): short click toggles the screen on/off; hold ~1 s
   powers the device off. A sustained strong shake also wakes the screen.
@@ -198,6 +199,8 @@ default) so you can see each state on the device.
 - **Stats** — CPU / RAM / GPU / TEMP bars + battery / disk I/O / net / top process.
 - **Graph** — scrolling CPU history.
 - **Procs** — top processes by CPU and, separately, by RAM.
+- **Env** — room temperature, humidity, and barometric pressure (with a rising /
+  falling / steady trend). Appears only when the ENV III HAT is attached.
 
 ## Characters
 
@@ -227,6 +230,14 @@ conditions are true, the first match wins (priority order top to bottom):
 
 When the agent is not connected, the pet shows SLEEP with a "waiting" message.
 
+When the ENV III HAT is attached, room readings can add one of two optional mood
+modifiers, but only while the PC-driven mood is the calm HAPPY state:
+
+- **STUFFY** — room temperature >= 27 C and humidity >= 60%. Overrides the mood
+  to STUFFED and shows a "stuffy" badge.
+- **WEATHER** — barometric pressure is falling (pressure trend < 0). Shows a
+  "weather" badge without changing the mood.
+
 ### Panic tiers
 
 If the PC stays in PANIC continuously, the pet's distress escalates through
@@ -247,6 +258,14 @@ to SLEEP / "waiting."
 
 On disconnect the device re-advertises automatically. The agent reconnects on
 the next scan cycle.
+
+### ENV telemetry
+
+When the ENV III HAT is attached and the link is up, the device notifies the PC
+with the latest room readings every **5 seconds** over the TX characteristic
+(`ENV;temp=..;hum=..;press=..`). The agent appends each reading to a rotating
+CSV (`--env-log`, default `env_log.csv`). This channel is autonomous from the
+PC-to-device metric stream.
 
 ### Screen power management
 

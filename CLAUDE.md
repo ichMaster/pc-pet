@@ -10,6 +10,13 @@ and a Python host agent on the PC (BLE central). The PC streams system metrics;
 the device renders an animated "pet" whose mood reflects those metrics, plus
 info screens.
 
+The PC->device metric packet (over the RX characteristic) is
+`cpu,ram,temp,net,procs,topname,gpu,batt,charging,diskR,diskW;cpuList;ramList`
+(11 comma metric fields, then semicolon-separated CPU and RAM proc lists; each
+list is `name:val,name:val,...`). `topname` is the busiest process name. With the optional ENV III HAT, the device also
+sends a reverse telemetry line back to the PC over the TX notify characteristic:
+`ENV;temp=%.1f;hum=%d;press=%d`. See `docs/protocol.md` for the full wire format.
+
 ## Hard rules
 
 - **No emoji** anywhere — code, comments, UI text, commit messages, docs.
@@ -78,6 +85,12 @@ Rules for the split:
 - Battery comes from `psutil.sensors_battery()`.
 - `find_device()` matches by name substring OR the NUS service UUID, and supports
   an explicit `--address`.
+- `EnvLogger` subscribes to the device's TX notify characteristic and writes the
+  ENV reverse telemetry (`ENV;temp=..;hum=..;press=..`) to a CSV with header
+  `timestamp,temp_c,humidity_pct,pressure_hpa`. Controlled by `--env-log`
+  (default `env_log.csv`; pass an empty string to disable), `--env-log-max-bytes`
+  (default 5000000, rotate when the file reaches this size), and `--env-log-keep`
+  (default 5 rotated files).
 
 ## Build / run
 
