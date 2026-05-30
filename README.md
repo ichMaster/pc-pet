@@ -15,10 +15,14 @@ pc-pet/
 ├── README.md                     # this file
 ├── CLAUDE.md                     # working notes / conventions for Claude Code
 ├── firmware/
-│   └── pc_tamagotchi/            # one Arduino sketch, split into tabs
-│       ├── pc_tamagotchi.ino     # main: globals, BLE, parsePacket, setup, loop
-│       ├── pet_types.h           # shared enums/structs (MelNote, Mood, View, ...)
-│       ├── pet_helpers.ino       # logic helpers (mood, colours, panic, trend, ENV)
+│   └── pc_tamagotchi/            # one Arduino sketch, split into component tabs
+│       ├── pc_tamagotchi.ino     # main: setup() + loop()
+│       ├── pet_types.h           # enums / structs
+│       ├── pet_config.h          # all constants + melody data
+│       ├── pet_state.h           # all mutable globals
+│       ├── pet_ble.ino           # RX callbacks + packet parsing
+│       ├── pet_audio.ino         # melodies, siren, ambient, voice, heartbeat
+│       ├── pet_mood.ino          # mood / character / pressure / ENV logic
 │       └── pet_render.ino        # character art + pet renderer + view screens
 ├── agent/
 │   ├── pc_pet_agent.py           # host agent (Python, psutil + bleak)
