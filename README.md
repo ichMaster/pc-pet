@@ -102,6 +102,9 @@ Go to **Tools > Manage Libraries** and install:
   speaker
 - **M5GFX** (by M5Stack) -- graphics and canvas rendering (installed
   automatically as a dependency of M5Unified)
+- **M5Unit-ENV** (by M5Stack) -- ENV III HAT sensors (SHT30 + QMP6988). Only
+  needed if you fit the ENV III HAT; the firmware presence-checks at boot and
+  runs normally without it.
 
 The BLE libraries (`BLEDevice`, `BLEServer`, `BLE2902`) are bundled with the
 ESP32 Arduino core and do not need separate installation.

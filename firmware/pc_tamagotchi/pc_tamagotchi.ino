@@ -23,6 +23,7 @@
 #include <BLEUtils.h>
 #include <BLE2902.h>
 #include <math.h>
+#include "M5UnitENV.h"   // ENV III HAT (SHT30 + QMP6988), PCP-005
 
 // ---- Nordic UART Service UUIDs -------------------------------
 #define SERVICE_UUID "6E400001-B5A3-F393-E0A9-E50E24DCCA9E"
@@ -117,6 +118,15 @@ uint32_t g_lastBattBeep = 0;
 uint32_t g_lastTick1s = 0;
 uint32_t g_uptimeSec  = 0;
 uint32_t g_panicSec   = 0;
+
+// ---- ENV III HAT (PCP-005): SHT30 + QMP6988 on Wire1(0,26) ----
+SHT3X    g_sht30;
+QMP6988  g_qmp6988;
+bool     g_envPresent = false;
+float    g_envTemp    = 0;    // room temperature, Celsius
+float    g_envHum     = 0;    // relative humidity, %
+float    g_envPress   = 0;    // barometric pressure, hPa
+uint32_t g_lastEnvRead = 0;
 
 M5Canvas canvas(&M5.Display);
 
@@ -284,6 +294,17 @@ void setup() {
   M5.Display.drawString("PC-Pet", M5.Display.width() / 2, 90);
   M5.Display.setTextSize(1);
   M5.Display.drawString("waiting for PC...", M5.Display.width() / 2, 130);
+
+  // ---- ENV III HAT (PCP-005) ----
+  // Separate I2C bus (Wire1) on the HAT pins G0=SDA / G26=SCL so it does not
+  // clash with the internal IMU/RTC on the main Wire bus. Presence-checked:
+  // G0 is a strap pin, so a missing/again HAT must not hang boot.
+  {
+    bool sht_ok = g_sht30.begin(&Wire1, SHT3X_I2C_ADDR, 0, 26, 400000U);
+    bool qmp_ok = g_qmp6988.begin(&Wire1, QMP6988_SLAVE_ADDRESS_L, 0, 26, 400000U);
+    g_envPresent = sht_ok && qmp_ok;
+    Serial.printf("ENV III: %s\n", g_envPresent ? "present" : "absent");
+  }
 
   // ---- BLE peripheral ----
   BLEDevice::init(DEVICE_NAME);
@@ -907,6 +928,13 @@ void loop() {
     } else {
       g_panicSec = 0;
     }
+  }
+
+  // ---- ENV III read (PCP-005): slow, gated; I2C reads block ----
+  if (g_envPresent && millis() - g_lastEnvRead >= 2000) {
+    g_lastEnvRead = millis();
+    if (g_sht30.update())   { g_envTemp = g_sht30.cTemp; g_envHum = g_sht30.humidity; }
+    if (g_qmp6988.update()) { g_envPress = g_qmp6988.pressure / 100.0f; }  // Pa -> hPa
   }
 
   // ---- screen power management ----
