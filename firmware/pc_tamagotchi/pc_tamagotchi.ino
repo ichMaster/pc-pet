@@ -309,9 +309,11 @@ void setup() {
   // clash with the internal IMU/RTC on the main Wire bus. Presence-checked:
   // G0 is a strap pin, so a missing/again HAT must not hang boot.
   {
-    bool sht_ok = g_sht30.begin(&Wire1, SHT3X_I2C_ADDR, 0, 26, 400000U);
-    bool qmp_ok = g_qmp6988.begin(&Wire1, QMP6988_SLAVE_ADDRESS_L, 0, 26, 400000U);
-    g_envPresent = sht_ok && qmp_ok;
+    // ENV III HAT is on the main Wire bus (G0=SDA / G26=SCL), NOT Wire1.
+    // begin() returns true even when absent, so confirm with a real read.
+    g_sht30.begin(&Wire, SHT3X_I2C_ADDR, 0, 26, 400000U);
+    g_qmp6988.begin(&Wire, QMP6988_SLAVE_ADDRESS_L, 0, 26, 400000U);
+    g_envPresent = g_sht30.update() && g_qmp6988.update();
     Serial.printf("ENV III: %s\n", g_envPresent ? "present" : "absent");
   }
 
@@ -428,9 +430,6 @@ void loop() {
     Serial.printf("dbg: writes=%lu getLen=%u paramLen=%u conn=%d\n",
                   (unsigned long)g_writeCount, (unsigned)g_dbgGetLen,
                   (unsigned)g_dbgParamLen, (int)g_connected);
-    Serial.printf("env: present=%d temp=%.1f hum=%.1f press=%.1f lastRead=%lu\n",
-                  (int)g_envPresent, g_envTemp, g_envHum, g_envPress,
-                  (unsigned long)g_lastEnvRead);
   }
 
   // ---- buttons ----
